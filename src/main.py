@@ -5,7 +5,6 @@ from jcs import canonicalize
 
 from threading import Timer
 
-
 import mempool
 import objects
 import peer_db
@@ -26,69 +25,86 @@ BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
 MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
 LISTEN_CFG = {
-        "address": const.ADDRESS,
-        "port": const.PORT
+    "address": const.ADDRESS,
+    "port": const.PORT
 }
 
 NODE_VERSION = "0.10.1"
 NODE_NAME = "KermaMVS 2023W"
 
+
 # Add peer to your list of peers
 def add_peer(peer):
-    pass # TODO
+    pass  # TODO
+
 
 # Add connection if not already open
 def add_connection(peer, queue):
-    pass # TODO
+    pass  # TODO
+
 
 # Delete connection
 def del_connection(peer):
-    pass # TODO
+    pass  # TODO
+
 
 # Make msg objects
 def mk_error_msg(error_str, error_name):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_hello_msg():
     # TODO
     data = dict(type="hello", version=NODE_VERSION, agent=NODE_NAME)
     return prepare_writer_msg(data)
 
+
 def mk_getpeers_msg():
     # TODO
     data = dict(type="getpeers")
     return prepare_writer_msg(data)
 
+
 def mk_peers_msg():
-    pass # TODO
+    pass  # TODO
+
 
 def mk_getobject_msg(objid):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_object_msg(obj_dict):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_ihaveobject_msg(objid):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_chaintip_msg(blockid):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_mempool_msg(txids):
-    pass # TODO
+    pass  # TODO
+
 
 def mk_getchaintip_msg():
-    pass # TODO
+    pass  # TODO
+
 
 def mk_getmempool_msg():
-    pass # TODO
+    pass  # TODO
+
 
 # parses a message as json. returns decoded message
 def parse_msg(msg_str):
-    pass # TODO
+    pass  # TODO
+
 
 def split_msg(msg, chunk_size=3):
-    yield from [msg[i:i+chunk_size] for i in range(0, len(msg), chunk_size)]
+    yield from [msg[i:i + chunk_size] for i in range(0, len(msg), chunk_size)]
+
 
 # Send data over the network as a message
 async def write_msg(writer, msg_dict):
@@ -101,71 +117,86 @@ async def write_msg(writer, msg_dict):
     print(f"writing {msg_dict}", flush=True)
     writer.write(msg_dict)
     await writer.drain()
-    pass # TODO
+    pass  # TODO
+
 
 # Check if message contains no invalid keys,
 # raises a MalformedMsgException
 def validate_allowed_keys(msg_dict, allowed_keys, msg_type):
-    pass # TODO
+    pass  # TODO
 
 
 # Validate the hello message
 # raises an exception
 def validate_hello_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # returns true iff host_str is a valid hostname
 def validate_hostname(host_str):
-    pass # TODO
+    pass  # TODO
+
 
 # returns true iff host_str is a valid ipv4 address
 def validate_ipv4addr(host_str):
-    pass # TODO
+    pass  # TODO
+
 
 # returns true iff peer_str is a valid peer address
 def validate_peer_str(peer_str):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_peers_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_getpeers_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_getchaintip_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_getmempool_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_error_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_ihaveobject_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_getobject_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_object_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # raise an exception if not valid
 def validate_chaintip_msg(msg_dict):
-    pass # todo
-    
+    pass  # todo
+
+
 # raise an exception if not valid
 def validate_mempool_msg(msg_dict):
-    pass # todo
-        
+    pass  # todo
+
+
 def validate_msg(msg_dict):
     msg_type = msg_dict['type']
     if msg_type == 'hello':
@@ -191,23 +222,24 @@ def validate_msg(msg_dict):
     elif msg_type == 'mempool':
         validate_mempool_msg(msg_dict)
     else:
-        pass # TODO
+        pass  # TODO
 
 
 def handle_peers_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
 
 
 def handle_error_msg(msg_dict, peer_self):
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_ihaveobject_msg(msg_dict, writer):
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_getobject_msg(msg_dict, writer):
-    pass # TODO
+    pass  # TODO
+
 
 # return a list of transactions that tx_dict references
 def gather_previous_txs(db_cur, tx_dict):
@@ -215,7 +247,8 @@ def gather_previous_txs(db_cur, tx_dict):
     if 'height' in tx_dict:
         return {}
 
-    pass # TODO
+    pass  # TODO
+
 
 # get the block, the current utxo and block height
 def get_block_utxo_height(blockid):
@@ -225,56 +258,63 @@ def get_block_utxo_height(blockid):
     height = ''
     return (block, utxo, height)
 
+
 # get all transactions as a dict txid -> tx from a list of ids
 def get_block_txs(txids):
-    pass # TODO
+    pass  # TODO
 
 
 # Stores for a block its utxoset and height
 def store_block_utxo_height(block, utxo, height: int):
-    pass # TODO
+    pass  # TODO
+
 
 # runs a task to verify a block
 # raises blockverifyexception
 async def verify_block_task(block_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # adds a block verify task to queue and starting it
 def add_verify_block_task(objid, block, queue):
-    pass # TODO
+    pass  # TODO
+
 
 # abort a block verify task
 async def del_verify_block_task(task, objid):
-    pass # TODO
+    pass  # TODO
+
 
 # what to do when an object message arrives
 async def handle_object_msg(msg_dict, peer_self, writer):
-    pass # TODO
+    pass  # TODO
 
 
 # returns the chaintip blockid
 def get_chaintip_blockid():
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_getchaintip_msg(msg_dict, writer):
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_getmempool_msg(msg_dict, writer):
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_chaintip_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
 
 
 async def handle_mempool_msg(msg_dict):
-    pass # TODO
+    pass  # TODO
+
 
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
-    pass # TODO
+    pass  # TODO
+
 
 def prepare_writer_msg(data: dict[str: str]):
     # should not need error handling as it's not user-provided
@@ -282,8 +322,10 @@ def prepare_writer_msg(data: dict[str: str]):
     json_data += "\n"
     return json_data.encode()
 
+
 def _raise(msg):
     raise msg
+
 
 # how to handle a connection
 async def handle_connection(reader, writer):
@@ -344,7 +386,7 @@ async def handle_connection(reader, writer):
 
             # wait for network or queue messages
             done, pending = await asyncio.wait([read_task, queue_task],
-                    return_when = asyncio.FIRST_COMPLETED)
+                                               return_when=asyncio.FIRST_COMPLETED)
             if read_task in done:
                 msg_str = read_task.result()
                 read_task = None
@@ -359,7 +401,8 @@ async def handle_connection(reader, writer):
             if read_task is not None:
                 continue
 
-            if (msg_str.startswith(b"{") and not msg_str.endswith(b"}\n")) or (msg_str.endswith(b"}\n") and not msg_str.startswith(b"{")):
+            if (msg_str.startswith(b"{") and not msg_str.endswith(b"}\n")) or (
+                    msg_str.endswith(b"}\n") and not msg_str.startswith(b"{")):
                 parts.append(msg_str)
 
                 if len(parts) > 1:
@@ -406,7 +449,7 @@ async def handle_connection(reader, writer):
 async def connect_to_node(peer: Peer):
     try:
         reader, writer = await asyncio.open_connection(peer.host, peer.port,
-                limit=const.RECV_BUFFER_LIMIT)
+                                                       limit=const.RECV_BUFFER_LIMIT)
     except Exception as e:
         print(str(e), flush=True)
         return
@@ -417,12 +460,13 @@ async def connect_to_node(peer: Peer):
 async def listen():
     print("listening!", flush=True)
     server = await asyncio.start_server(handle_connection, LISTEN_CFG['address'],
-            LISTEN_CFG['port'], limit=const.RECV_BUFFER_LIMIT)
+                                        LISTEN_CFG['port'], limit=const.RECV_BUFFER_LIMIT)
 
     print("Listening on {}:{}".format(LISTEN_CFG['address'], LISTEN_CFG['port']), flush=True)
 
     async with server:
         await server.serve_forever()
+
 
 # bootstrap peers. connect to hardcoded peers
 async def bootstrap():
@@ -432,7 +476,8 @@ async def bootstrap():
     #     await connect_to_node(boot_peer)
     #     print("Connected to bootstrap node!", flush=True)
     # print("bootstrapping", flush=True)
-    pass # TODO
+    pass  # TODO
+
 
 # connect to some peers
 def resupply_connections():
@@ -442,7 +487,7 @@ def resupply_connections():
     #     PEERS.append(boot_peer)
     #     await connect_to_node(boot_peer)
     #     print("Connected to bootstrap node!", flush=True)
-    pass # TODO
+    pass  # TODO
 
 
 async def init():
