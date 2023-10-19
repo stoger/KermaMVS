@@ -39,6 +39,7 @@ def load_peers() -> Set[Peer]:
     try:
         file = open(PEER_DB_FILE, "r")
         lines = file.readlines()
+        file.close()
         lines.reverse()
         result = []
         for line in lines:
@@ -53,9 +54,18 @@ def load_peers() -> Set[Peer]:
             else:
                 file.close()
                 break
-        file.close()
         return set(result)
     except FileNotFoundError:
         file = open(PEER_DB_FILE, "w")
         file.close()
         return set()
+
+
+def forget_peer(peer: Peer):
+
+    with open(PEER_DB_FILE, "r") as f:
+        lines = f.readlines()
+    with open(PEER_DB_FILE, "w") as f:
+        for line in lines:
+            if not line.strip("\n").__contains__(peer.host + ',' + str(peer.port)):
+                f.write(line)
