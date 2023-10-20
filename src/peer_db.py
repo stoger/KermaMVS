@@ -18,7 +18,7 @@ def string_exists(string_to_add):
 
 def store_peer(peer: Peer, existing_peers: Iterable[Peer] = None):
     # append to file
-    if not string_exists(peer.host + ',' + peer.port):
+    if not string_exists(peer.host + ',' + str(peer.port)):
         if existing_peers:
             file = open(PEER_DB_FILE, "w")
             data = ""
@@ -50,7 +50,8 @@ def load_peers() -> Set[Peer]:
                     continue
                 content = line.split(",")
                 peer = Peer(host_str=content[0], port=int(content[1]))
-                result.append(peer.host + ':' + peer.port)
+                # result.append(peer.host + ':' + str(peer.port))
+                result.append(peer)
             else:
                 file.close()
                 break
@@ -62,7 +63,6 @@ def load_peers() -> Set[Peer]:
 
 
 def forget_peer(peer: Peer):
-
     with open(PEER_DB_FILE, "r") as f:
         lines = f.readlines()
     with open(PEER_DB_FILE, "w") as f:

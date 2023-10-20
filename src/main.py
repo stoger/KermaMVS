@@ -7,6 +7,8 @@ from jcs import canonicalize
 import csv
 import socket
 
+from datetime import datetime
+
 import mempool
 import objects
 import peer_db
@@ -25,7 +27,7 @@ BACKGROUND_TASKS = set()
 BLOCK_VERIFY_TASKS = dict()
 BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
-CSV_FILE = "peer.csv"
+CSV_FILE = "peers.csv"
 MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
 LISTEN_CFG = {
     "address": const.ADDRESS,
@@ -38,14 +40,23 @@ NODE_NAME = "NodeJS"
 
 # Add peer to your list of peers
 def add_peer(peer):
-    PEERS.add(peer)
-    peer_db.store_peer(peer, PEERS)
+    if peer not in PEERS:
+        peer_db.store_peer(peer, PEERS) # TODO: make sure no duplicates?
+        PEERS.add(peer)
+
+
+def remove_peer(peer):
+    if peer in PEERS:
+        PEERS.remove(peer)
+        log(f"Removed peer {peer}, new peers: {PEERS}")
+        peer_db.forget_peer(peer)
 
 
 # Add connection if not already open
 def add_connection(peer, queue):
     if peer not in CONNECTIONS.keys():
         CONNECTIONS.update({peer: dict(queue=queue)})
+        add_peer(peer)
     pass
 
 
@@ -69,8 +80,18 @@ def mk_getpeers_msg():
 
 
 def mk_peers_msg():
-    peers = peer_db.load_peers()
-    return dict(type="peers", peers=peers)
+    peers_available = len(PEERS)
+    peers = PEERS
+    log(f"Available PEERS: {peers}")
+    if peers_available < 30:
+        additional = peer_db.load_peers()
+        log(f"Loaded additional: {additional}")
+        peers.update(additional)
+    # peers = peer_db.load_peers()
+    str_peers = []
+    for peer in peers:
+        str_peers.append(str(peer))
+    return dict(type="peers", peers=str_peers)
 
 
 def mk_getobject_msg(objid):
@@ -111,7 +132,7 @@ def parse_msg(msg_str):
 
 # Send data over the network as a message
 async def write_msg(writer, msg_dict: dict[str: str]):
-    print(f"writing {msg_dict}", flush=True)
+    log(f"writing {msg_dict}")
     bytes_json = canonicalize(msg_dict)
     writer.write(bytes_json)
     writer.write(b"\n")
@@ -128,7 +149,9 @@ def validate_allowed_keys(msg_dict, allowed_keys, msg_type):
 # Validate the hello message
 # raises an exception
 def validate_hello_msg(msg_dict):
-    if not all(x in ["type", "agent", "version"] for x in msg_dict.keys()):
+    # ensure keys are ordered alphabetically
+    canon_hello = json.loads(canonicalize(msg_dict))
+    if not (["agent", "type", "version"] == list(canon_hello.keys())):
         raise MalformedMsgException("INVALID_FORMAT",
                                     "Unexpected set of keys received, only 'type', 'agent' and 'version' are allowed")
 
@@ -144,11 +167,19 @@ def validate_hello_msg(msg_dict):
 
 # returns true iff host_str is a valid hostname
 def validate_hostname(host_str):
-    pattern = r"^(?!-)[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$"
-    if re.match(pattern, host_str):
-        return True
-    else:
+    hostname_pattern = re.compile(r"^[a-zA-Z\d\.\-\_]{3,50}$")
+    assure_az_pattern = re.compile(r".*?[a-zA-Z]{1,}.*?")
+
+    if not hostname_pattern.match(host_str):
         return False
+
+    if not assure_az_pattern.match(host_str):
+        return False
+    
+    if "." not in host_str or (host_str.startswith(".") or host_str.endswith(".")):
+        return False
+    
+    return True
 
 
 # returns true iff host_str is a valid ipv4 address
@@ -162,21 +193,36 @@ def validate_ipv4addr(host_str):
 
 # returns true iff peer_str is a valid peer address
 def validate_peer_str(peer_str):
-    if validate_ipv4addr(peer_str) or validate_hostname(peer_str):
+    peer_str_pattern = re.compile(r"^[\w\.]+?\w+:\d+$")
+    if not peer_str_pattern.match(peer_str):
+        log(f"{peer_str} did not match basic regex")
+        return False
+
+    host, port = peer_str.split(":")
+    host = host.strip()
+    port = int(port)
+    if port <= 0 or port > 65535:
+        log(f"{port} is not in desirable range")
+        return False
+
+    if validate_ipv4addr(host) or validate_hostname(host):
         return True
     else:
-        raise False
+        return False
 
 
 # raise an exception if not valid
 def validate_peers_msg(msg_dict):
-    if msg_dict is not dict(type="peers", peers=List[str]):
-        raise MalformedMsgException
+    canon_dict = json.loads(canonicalize(msg_dict))
+    if not ["peers", "type"] == list(canon_dict.keys()):
+        # TODO: malicious node, disconnect & remove (PEERS, CONNECTIONS, peer_db)
+        raise MalformedMsgException("INVALID_FORMAT", "Invalid peers-dictionary provided")
     else:
+        # TODO: make sure no 0.0.0.0, 127.0.0.1, localhost? otherwise we might connect to ourselves later
         peers = msg_dict["peers"]
         for peer in peers:
             if not validate_peer_str(peer):
-                raise MalformedMsgException
+                raise MalformedMsgException("INVALID_FORMAT", "Invalid peer_str provided")
 
 
 # raise an exception if not valid
@@ -232,6 +278,7 @@ def validate_msg(msg_dict):
     elif msg_type == 'getpeers':
         validate_getpeers_msg(msg_dict)
     elif msg_type == 'peers':
+        log("validating peers")
         validate_peers_msg(msg_dict)
     elif msg_type == 'getchaintip':
         validate_getchaintip_msg(msg_dict)
@@ -250,18 +297,17 @@ def validate_msg(msg_dict):
     elif msg_type == 'mempool':
         validate_mempool_msg(msg_dict)
     else:
-        raise UnsupportedMsgException("Invalid message received", "INVALID_FORMAT")
+        raise UnsupportedMsgException("INVALID_FORMAT", "Invalid message received (unknown type)")
 
 
 def handle_peers_msg(msg_dict):
-    try:
-        if validate_msg(msg_dict):
-            for peer in msg_dict["peers"]:
-                add_peer(peer)
-
-    except Exception as e:
-        raise e
-
+    # all is validated when reaching here
+    for peer in msg_dict["peers"]:
+        if validate_peer_str(peer):
+            log(f"adding peer: {peer}")
+            host, port = peer.split(":")
+            add_peer(Peer(host, port))
+        
 
 def handle_error_msg(msg_dict, peer_self):
     pass  # TODO
@@ -349,15 +395,16 @@ async def handle_mempool_msg(msg_dict):
 async def handle_queue_msg(msg_dict, writer):
     validate_msg(msg_dict)
 
-    peer = writer.get_extra_info('peername')
+    peer = Peer(*writer.get_extra_info('peername'))
     handshake_complete = CONNECTIONS[peer]["handshake_complete"]
 
     match msg_dict["type"]:
         case "hello":
-            if CONNECTIONS[peer]["handshake_complete"]:
+            if handshake_complete:
                 raise UnexpectedMsgException("INVALID_HANDSHAKE", "hello message received after successful handshake")
             else:
                 CONNECTIONS[peer]["handshake_fail_task"].cancel()
+                CONNECTIONS[peer]["handshake_fail_task"] = None
                 CONNECTIONS[peer]["handshake_complete"] = True
             pass
         case "getpeers":
@@ -374,6 +421,7 @@ async def handle_queue_msg(msg_dict, writer):
 async def handle_handshake_fail(writer):
     await write_msg(writer, mk_error_msg("No handshake message received in 20s", "INVALID_HANDSHAKE"))
     writer.close()
+    await writer.wait_closed()
     pass
 
 
@@ -389,10 +437,11 @@ async def handle_connection(reader, writer):
         if not peer:
             raise Exception("Failed to get peername!")
 
-        print("New connection with {}".format(peer), flush=True)
+        peer = Peer(*peer)
+        log("New connection with {}".format(peer))
         add_connection(peer, queue)
     except Exception as e:
-        print(str(e), flush=True)
+        log(str(e))
         try:
             writer.close()
         except:
@@ -413,7 +462,6 @@ async def handle_connection(reader, writer):
         CONNECTIONS[peer]["handshake_complete"] = False
 
         # Complete handshake
-        handshake_state = False
         msg_str = None
         parts = []
 
@@ -446,17 +494,6 @@ async def handle_connection(reader, writer):
             # TODO
             if not msg_str.endswith(b"\n"):
                 parts.append(msg_str)
-                # if len(parts) > 1:
-                #     value = b""
-                #     # try to stitch them together
-                #     for item in parts:
-                #         value += item.strip()
-                #         try:
-                #             cmd = json.loads(value.decode())
-                #             print(f"we noticed a \"valid\" command! {value}")
-                #             await queue.put(cmd)
-                #         except ValueError:
-                #             continue
             else:
                 if len(parts) > 0:
                     parts.append(msg_str)
@@ -466,33 +503,29 @@ async def handle_connection(reader, writer):
                 parsed_msg = parse_msg(msg_str)
                 await queue.put(parsed_msg)
 
-            print(f"Received: {msg_str}, stored parts = {parts}", flush=True)
-            # todo handle message
-
-            if msg_str.lower() == b"quit\n":
-                # for now, close connection
-                raise MessageException("closing connection")
-
+            log(f"Received: {msg_str}, stored parts = {parts}")
     except asyncio.exceptions.TimeoutError:
-        print("{}: Timeout".format(peer), flush=True)
+        log("{}: Timeout".format(peer))
         try:
             await write_msg(writer, mk_error_msg("Timeout", ""))
         except:
             pass
     except MessageException as e:
-        print("{}: {}".format(peer, str(e)), flush=True)
+        log("{}: {}".format(peer, str(e)))
         try:
             await write_msg(writer, mk_error_msg(e.NETWORK_ERROR_MESSAGE, e.NETWORK_ERROR_NAME))
         except:
             pass
+        remove_peer(peer)
     except Exception as e:
-        print("{}: {}".format(peer, str(e)), flush=True)
+        log("{}: {}".format(peer, str(e)))
     finally:
-        if handshake_fail_task is not None:
-            handshake_fail_task.cancel()
+        if CONNECTIONS[peer]["handshake_fail_task"] is not None:
+            CONNECTIONS[peer]["handshake_fail_task"] = handshake_fail_task.cancel()
 
-        print("Closing connection with {}".format(peer), flush=True)
+        log("Closing connection with {}".format(peer))
         writer.close()
+        await writer.wait_closed()
         del_connection(peer)
         if read_task is not None and not read_task.done():
             read_task.cancel()
@@ -505,18 +538,19 @@ async def connect_to_node(peer: Peer):
         reader, writer = await asyncio.open_connection(peer.host, peer.port,
                                                        limit=const.RECV_BUFFER_LIMIT)
     except Exception as e:
-        print(str(e), flush=True)
+        log(str(e))
+        remove_peer(peer)
         return
 
     await handle_connection(reader, writer)
 
 
 async def listen():
-    print("listening!", flush=True)
+    log("listening!")
     server = await asyncio.start_server(handle_connection, LISTEN_CFG['address'],
                                         LISTEN_CFG['port'], limit=const.RECV_BUFFER_LIMIT)
 
-    print("Listening on {}:{}".format(LISTEN_CFG['address'], LISTEN_CFG['port']), flush=True)
+    log("Listening on {}:{}".format(LISTEN_CFG['address'], LISTEN_CFG['port']))
 
     async with server:
         await server.serve_forever()
@@ -524,24 +558,28 @@ async def listen():
 
 # bootstrap peers. connect to hardcoded peers
 async def bootstrap():
-    boot_peer = const.PRELOADED_PEERS
+    boot_peer = const.PRELOADED_PEERS[0]
     if boot_peer not in PEERS:
-        add_peer(boot_peer)
+        # add_peer(boot_peer)
         await connect_to_node(boot_peer)
-        print("Connected to bootstrap node!", flush=True)
-        print("bootstrapping", flush=True)
+        log("Connected to bootstrap node!")
+        log("bootstrapping")
     else:
         pass
 
 
 # connect to some peers
 async def resupply_connections():
-    print("connecting to peers :)", flush=True)
-    for candidate in PEERS:
-        if candidate not in CONNECTIONS:
-            add_peer(candidate)
+    log("connecting to peers :)")
+    log(PEERS)
+    pcopy = set(PEERS)
+    for candidate in pcopy:
+        ckeys = CONNECTIONS.keys()
+        log(f"Candidate: {candidate}, ckeys: {ckeys}")
+        if candidate not in ckeys:
+            # add_peer(candidate)
+            log("Resupplied connection to candidate node!")
             await connect_to_node(candidate)
-            print("Resupplied connection to candidate node!", flush=True)
     pass
 
 
@@ -552,20 +590,22 @@ async def init():
     TX_WAIT_LOCK = asyncio.Condition()
 
     PEERS.update(peer_db.load_peers())
+    log(f"Loaded initial peers: {PEERS}")
 
     bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
 
     boot_peer = const.PRELOADED_PEERS[0]
-    print(f'boot_peer: {boot_peer}', flush=True)
-    await connect_to_node(boot_peer)
+    log(f'boot_peer: {boot_peer}')
+    # await connect_to_node(boot_peer)
 
     # Service loop
     while True:
-        print("Service loop reporting in.", flush=True)
-        print("Open connections: {}".format(set(CONNECTIONS.keys())), flush=True)
+        log("Service loop reporting in.")
+        log("Open connections: {}".format(set(CONNECTIONS.keys())))
 
         # Open more connections if necessary
+        log(f"connections open: {len(CONNECTIONS)}, max connections: {const.MAX_CONNECTIONS}")
         if len(CONNECTIONS) < const.MAX_CONNECTIONS:
             await resupply_connections()
 
@@ -576,12 +616,17 @@ async def init():
 
 
 def main():
-    print("running main", flush=True)
+    log("running main")
     asyncio.run(init())
 
 
+def log(msg, flush=True):
+    print(f"[{datetime.now()}] {msg}", flush=flush)
+    pass
+
+
 if __name__ == "__main__":
-    print("booting up", flush=True)
+    log("booting up")
     if len(sys.argv) == 3:
         LISTEN_CFG['address'] = sys.argv[1]
         LISTEN_CFG['port'] = sys.argv[2]
