@@ -41,8 +41,9 @@ NODE_NAME = "NodeJS"
 # Add peer to your list of peers
 def add_peer(peer):
     if peer not in PEERS:
-        peer_db.store_peer(peer, PEERS) # TODO: make sure no duplicates?
+        peer_db.store_peer(peer, PEERS)
         PEERS.add(peer)
+        log(f"Added peer {peer} to file and PEERS, new peers: {PEERS}")
 
 
 def remove_peer(peer):
@@ -175,10 +176,10 @@ def validate_hostname(host_str):
 
     if not assure_az_pattern.match(host_str):
         return False
-    
+
     if "." not in host_str or (host_str.startswith(".") or host_str.endswith(".")):
         return False
-    
+
     return True
 
 
@@ -198,6 +199,9 @@ def validate_peer_str(peer_str):
         log(f"{peer_str} did not match basic regex")
         return False
 
+    if peer_str.__contains__("localhost") or peer_str.__contains__("0.0.0.0") or peer_str.__contains__("127.0.0.1"):
+        log(f"{peer_str} may be our own address")
+        return False
     host, port = peer_str.split(":")
     host = host.strip()
     port = int(port)
@@ -218,7 +222,6 @@ def validate_peers_msg(msg_dict):
         # TODO: malicious node, disconnect & remove (PEERS, CONNECTIONS, peer_db)
         raise MalformedMsgException("INVALID_FORMAT", "Invalid peers-dictionary provided")
     else:
-        # TODO: make sure no 0.0.0.0, 127.0.0.1, localhost? otherwise we might connect to ourselves later
         peers = msg_dict["peers"]
         for peer in peers:
             if not validate_peer_str(peer):
@@ -306,8 +309,8 @@ def handle_peers_msg(msg_dict):
         if validate_peer_str(peer):
             log(f"adding peer: {peer}")
             host, port = peer.split(":")
-            add_peer(Peer(host, port))
-        
+            add_peer(Peer(host_str=host, port=port))
+
 
 def handle_error_msg(msg_dict, peer_self):
     pass  # TODO
@@ -394,7 +397,6 @@ async def handle_mempool_msg(msg_dict):
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
     validate_msg(msg_dict)
-
     peer = Peer(*writer.get_extra_info('peername'))
     handshake_complete = CONNECTIONS[peer]["handshake_complete"]
 
@@ -415,6 +417,9 @@ async def handle_queue_msg(msg_dict, writer):
             if not handshake_complete:
                 raise UnexpectedMsgException("INVALID_HANDSHAKE", "Non-hello message received before hello message")
             handle_peers_msg(msg_dict)
+        case _:
+            if not handshake_complete:
+                raise UnexpectedMsgException("INVALID_HANDSHAKE", "Non-hello message received before hello message")
     pass  # should not die :)
 
 
