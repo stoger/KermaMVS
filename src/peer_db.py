@@ -9,9 +9,9 @@ PEER_DB_FILE = "peers.csv"
 # Function to check if the string exists in the CSV
 def string_exists(string_to_add):
     with open(PEER_DB_FILE, "r", newline="") as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if string_to_add in row:
+        lines = file.readlines()
+        for line in lines:
+            if string_to_add.__eq__(line.strip()):
                 return True
     return False
 
