@@ -40,6 +40,10 @@ NODE_NAME = "NodeJS"
 
 # Add peer to your list of peers
 def add_peer(peer):
+    peer_str = peer.host
+    if peer_str.__contains__("localhost") or peer_str.__contains__("0.0.0.0") or peer_str.__contains__("127.0.0.1"):
+        log(f"{peer_str} may be our own address")
+        return
     if peer not in PEERS:
         peer_db.store_peer(peer, PEERS)
         PEERS.add(peer)
@@ -203,9 +207,6 @@ def validate_peer_str(peer_str):
         log(f"{peer_str} did not match basic regex")
         return False
 
-    if peer_str.__contains__("localhost") or peer_str.__contains__("0.0.0.0") or peer_str.__contains__("127.0.0.1"):
-        log(f"{peer_str} may be our own address")
-        return False
     host, port = peer_str.split(":")
     host = host.strip()
     port = int(port)
