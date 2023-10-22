@@ -89,9 +89,13 @@ def mk_peers_msg():
         log(f"Loaded additional: {additional}")
         peers.update(additional)
     # peers = peer_db.load_peers()
+    peers = set(list(peers)[:-1])
     str_peers = []
+
+    log(f"Peers {len(peers)} loaded: {peers}")
     for peer in peers:
         str_peers.append(str(peer))
+    str_peers.append(LISTEN_CFG["address"] + ':' + str(LISTEN_CFG["port"]))
     return dict(type="peers", peers=str_peers)
 
 
