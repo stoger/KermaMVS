@@ -67,7 +67,8 @@ def add_connection(peer, queue):
 
 # Delete connection
 def del_connection(peer):
-    CONNECTIONS.pop(peer)
+    if peer in CONNECTIONS:
+        CONNECTIONS.pop(peer)
     pass
 
 
@@ -224,7 +225,11 @@ def validate_peer_str(peer_str):
 def validate_peers_msg(msg_dict):
     canon_dict = json.loads(canonicalize(msg_dict))
     if not ["peers", "type"] == list(canon_dict.keys()):
-        # TODO: malicious node, disconnect & remove (PEERS, CONNECTIONS, peer_db)
+        if "peers" in canon_dict:
+            for peer in msg_dict["peers"]:
+                remove_peer(peer)
+                del_connection(peer)
+                peer_db.forget_peer(peer)
         raise MalformedMsgException("INVALID_FORMAT", "Invalid peers-dictionary provided")
     else:
         peers = msg_dict["peers"]
