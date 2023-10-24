@@ -99,7 +99,7 @@ def mk_peers_msg():
 
     log(f"Peers {len(peers)} loaded: {peers}")
     i = 0
-    for peer in peers:
+    for peer in reversed(list(peers)):
         i += 1
         if i < 30:
             str_peers.append(str(peer))
