@@ -100,7 +100,7 @@ def mk_peers_msg():
     log(f"Peers {len(peers)} loaded: {peers}")
     for peer in peers:
         str_peers.append(str(peer))
-    str_peers.append(LISTEN_CFG["address"] + ':' + str(LISTEN_CFG["port"]))
+    str_peers.append(const.OWN_IP + ':' + str(LISTEN_CFG["port"]))
     return dict(type="peers", peers=str_peers)
 
 
