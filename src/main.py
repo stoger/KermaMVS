@@ -21,7 +21,7 @@ import re
 import sqlite3
 import sys
 
-PEERS = set()
+PEERS = peer_db.load_peers()
 CONNECTIONS = dict()
 BACKGROUND_TASKS = set()
 BLOCK_VERIFY_TASKS = dict()
@@ -98,8 +98,11 @@ def mk_peers_msg():
     str_peers = []
 
     log(f"Peers {len(peers)} loaded: {peers}")
+    i = 0
     for peer in peers:
-        str_peers.append(str(peer))
+        i += 1
+        if i < 30:
+            str_peers.append(str(peer))
     str_peers.append(const.OWN_IP + ':' + str(LISTEN_CFG["port"]))
     return dict(type="peers", peers=str_peers)
 
