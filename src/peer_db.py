@@ -3,7 +3,7 @@ import csv
 from Peer import Peer
 from typing import Iterable, Set
 
-PEER_DB_FILE = "peers.csv"
+PEER_DB_FILE = "data/peers/peers.csv"
 
 
 # Function to check if the string exists in the CSV

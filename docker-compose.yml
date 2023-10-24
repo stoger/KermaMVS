@@ -9,3 +9,7 @@ services:
             - '18018:18018'
         container_name: kerma-python
         image: python
+        volumes:
+            - peerdb:/data/peers
+volumes:
+    peerdb:
