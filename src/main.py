@@ -61,7 +61,6 @@ def remove_peer(peer):
 def add_connection(peer, queue):
     if peer not in CONNECTIONS.keys():
         CONNECTIONS.update({peer: dict(queue=queue)})
-        add_peer(peer)
     pass
 
 
