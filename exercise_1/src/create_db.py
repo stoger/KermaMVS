@@ -13,7 +13,7 @@ def main():
 
     except Exception as e:
         con.rollback()
-        print(str(e))
+        print(str(e), flush=True)
     finally:
         con.close()
 
