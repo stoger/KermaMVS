@@ -8,24 +8,28 @@ def main():
     try:
         cur = con.cursor()
 
-        cur.execute("""CREATE TABLE IF NOT EXISTS transaction (
+        cur.execute("""CREATE TABLE IF NOT EXISTS tx (
         id TEXT PRIMARY KEY,
         height INTEGER,
-        inputs references inputs(id),
-        outputs references outputs(id),
+        inputs references inputs(input_id),
+        outputs references outputs(output_id),
         block references block(id)
         )""")
 
         cur.execute("""CREATE TABLE IF NOT EXISTS outputs (
-        id TEXT references object(id) PRIMARY KEY,
+        output_id SERIAL PRIMARY KEY,
+        tx TEXT references tx(id),
         pubkey TEXT,
-        val INTEGER)
+        val INTEGER,
+        idx INTEGER
         """)
 
         cur.execute("""CREATE TABLE IF NOT EXISTS inputs (
-        id TEXT references object(id) PRIMARY KEY,
+        input_id SERIAL PRIMARY KEY,
+        tx TEXT references tx(id),
         pubkey TEXT,
-        val INTEGER)
+        val INTEGER),
+        outpoint references outputs(output_id)
         """)
 
         cur.execute("""CREATE TABLE IF NOT EXISTS block(
