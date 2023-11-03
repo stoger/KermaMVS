@@ -21,6 +21,8 @@ BACKGROUND_TASKS = set()
 BLOCK_VERIFY_TASKS = dict()
 BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
+DB_CONNECTION = sqlite3.connect(const.DB_NAME)
+
 MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
 LISTEN_CFG = {
         "address": const.ADDRESS,
@@ -77,6 +79,14 @@ def mk_peers_msg():
     return {"type": "peers", "peers": pl}
 
 def mk_getobject_msg(objid):
+    try:
+        cur = DB_CONNECTION.cursor()
+
+    except Exception as e:
+        raise UNKNOWN
+
+
+
     pass # TODO
 
 def mk_object_msg(obj_dict):

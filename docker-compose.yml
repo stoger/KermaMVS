@@ -7,5 +7,24 @@ services:
         restart: always
         ports:
             - '18018:18018'
+        networks:
+            - dbnet
         container_name: kerma-python
         image: python
+    postgres:
+        container_name: postgres
+#        image: postgres:latest
+        image: jitesoft/sqlite:latest
+        restart: always
+        ports:
+            - '5432:5432'
+        networks:
+            - dbnet
+        volumes:
+            - dbvolume:/var/lib/postgresql/data
+volumes:
+    dbvolume:
+
+networks:
+    dbnet:
+        driver: bridge
