@@ -11,8 +11,6 @@ def main():
         cur.execute("""CREATE TABLE IF NOT EXISTS tx (
         id TEXT PRIMARY KEY,
         height INTEGER,
-        inputs references inputs(input_id),
-        outputs references outputs(output_id),
         block references block(id)
         )""")
 
@@ -27,8 +25,7 @@ def main():
         cur.execute("""CREATE TABLE IF NOT EXISTS inputs (
         input_id SERIAL PRIMARY KEY,
         tx TEXT references tx(id),
-        pubkey TEXT,
-        val INTEGER),
+        sig TEXT,
         outpoint references outputs(output_id)
         """)
 

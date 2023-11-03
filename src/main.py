@@ -118,10 +118,15 @@ def mk_object_msg(obj_dict):
             for i in outputs:
                 outputs_result.append({"pubkey":i[2], "value":str(i[3])})
 
-            # TODO Inputs fetchen
-
+            cur.execute(f"SELECT * FROM inputs WHERE tx = {obj_dict['objectid']}")
+            inputs = cur.fetchall()
+            inputs_result = []
+            for i in inputs:
+                cur.execute(f"SELECT * FROM outputs WHERE tx = {i[3]}")
+                outpoint = cur.fetchone()
+                inputs_result.append({"outpoint": {"txid": outpoint[1], "index": outpoint[4]}, "sig":i[2]})
             return {"type": "object",
-                    "object": {"height": result[1], "inputs": [], "outputs": outputs_result, "type": "transaction"}}
+                    "object": {"height": result[1], "inputs": inputs_result, "outputs": outputs_result, "type": "transaction"}}
 
     except Exception as e:
         raise ErrorUnknownObject(f"Unknown ObjectId: {obj_dict['objectid']}")
