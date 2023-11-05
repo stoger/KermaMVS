@@ -33,7 +33,7 @@ class ErrorInvalidHandshake(FaultyNodeException):
         super().__init__(self.message, self.error_name)
 
 
-class ErrorUnknownObject(FaultyNodeException):
+class ErrorUnknownObject(NonfaultyNodeException):
     def __init__(self, message) -> None:
         self.message = message
         self.error_name = "UNKNOWN_OBJECT"
