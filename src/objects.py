@@ -135,13 +135,11 @@ def verify_tx_signature(tx_dict, sig, pubkey):
         # Serialize and hash the message
         message = canonicalize(tx_dict)
         print(f"==============================\nVerifying signature: {sig}\npubkey: {pubkey}\ndictionary:\t{message}\n==============================")
-        h = hashlib.sha256()
-        h.update(message)
-        message_hash = h.digest()
+
         print("obtained message bytes", flush=True)
 
         # Verify the signature
-        public_key.verify(sig_bytes, message_hash)
+        public_key.verify(sig_bytes, message)
 
         print("verified!", flush=True)
 
