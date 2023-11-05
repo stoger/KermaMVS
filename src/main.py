@@ -3,6 +3,9 @@ import constants as const
 from message.msgexceptions import *
 from jcs import canonicalize
 
+from create_db import ObjectStore
+
+
 import mempool
 import objects
 import peer_db
@@ -14,6 +17,8 @@ import random
 import re
 import sqlite3
 import sys
+import copy
+
 
 PEERS = set()
 CONNECTIONS = dict()
@@ -22,6 +27,8 @@ BLOCK_VERIFY_TASKS = dict()
 BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
 DB_CONNECTION = sqlite3.connect(const.DB_NAME)
+
+OBJECT_STORAGE = None
 
 MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
 LISTEN_CFG = {
@@ -91,68 +98,11 @@ def mk_getobject_msg(objid):
 
 
 def mk_object_msg(obj_dict):
-    try:
-        cur = DB_CONNECTION.cursor()
-        cur.execute(f"SELECT * FROM tx WHERE id = {obj_dict['objectid']}")
-        result = cur.fetchone()
-
-        if not result:  # wenn keine Transaction
-            cur.execute(f"SELECT * FROM blocks WHERE id = {obj_dict['objectid']}")
-            result = cur.fetchone()
-            if not result:  # wenn auch kein Block
-                raise ErrorUnknownObject(f"Unknown ObjectId: {obj_dict['objectid']}")
-            else: # is Block
-                cur.execute(f"SELECT * FROM tx WHERE block = {obj_dict['objectid']}")
-                txs = cur.fetchall()
-                txs_results = []
-                for i in txs:
-                    txs_results.append(i[0])
-                return {"type": "object",
-                        "object": {"T": result[1], "created": result[2], "miner": result[3], "nonce": result[4],
-                                   "note": result[5],
-                                   "previd": result[6], "txids": txs_results, "type": "block"}}
-        else: # is Transaction
-            cur.execute(f"SELECT * FROM outputs WHERE tx = {obj_dict['objectid']}")
-            outputs = cur.fetchall()
-            outputs_result = []
-            for i in outputs:
-                outputs_result.append({"pubkey":i[2], "value":str(i[3])})
-
-            cur.execute(f"SELECT * FROM inputs WHERE tx = {obj_dict['objectid']}")
-            inputs = cur.fetchall()
-            inputs_result = []
-            for i in inputs:
-                cur.execute(f"SELECT * FROM outputs WHERE tx = {i[3]}")
-                outpoint = cur.fetchone()
-                inputs_result.append({"outpoint": {"txid": outpoint[1], "index": outpoint[4]}, "sig":i[2]})
-            return {"type": "object",
-                    "object": {"height": result[1], "inputs": inputs_result, "outputs": outputs_result, "type": "transaction"}}
-
-    except Exception as e:
-        raise ErrorUnknownObject(f"Unknown ObjectId: {obj_dict['objectid']}")
-
+    return { "type": "object", "object": obj_dict }
 
 
 def mk_ihaveobject_msg(objid):
-    try:
-        cur = DB_CONNECTION.cursor()
-        cur.execute(f"SELECT * FROM block WHERE id = {objid}")
-        result = cur.fetchone()
-        if not result:
-            cur.execute(f"SELECT * FROM tx WHERE id = {objid}")
-            result = cur.fetchone()
-
-        if not result:
-            mk_getobject_msg(objid)
-        else:
-            ret = {
-                "type": "ihaveobject",
-                "objectid": objid
-            }
-            return ret
-    except Exception as e:
-        print("Database error")
-        pass
+    return { "type": "ihaveobject", "objectid": objid }
 
 
 def mk_chaintip_msg(blockid):
@@ -343,16 +293,40 @@ def validate_error_msg(msg_dict):
 
 # raise an exception if not valid
 def validate_ihaveobject_msg(msg_dict):
+    validate_allowed_keys(msg_dict, ["type", "objectid"], "ihaveobject")
+    if not msg_dict["type"] == "ihaveobject":
+        raise ErrorInvalidFormat("Invalid type for ihaveobject-message")
+
+    if not objects.validate_objectid(msg_dict["objectid"]):
+        raise ErrorInvalidFormat("Invalid objectid provided")
+
     pass  # TODO
 
 
 # raise an exception if not valid
 def validate_getobject_msg(msg_dict):
+    validate_allowed_keys(msg_dict, ["type", "objectid"], "getobject")
+    if not msg_dict["type"] == "getobject":
+        raise ErrorInvalidFormat("Invalid type for getobject-message")
+
+    if not objects.validate_objectid(msg_dict["objectid"]):
+        raise ErrorInvalidFormat("Invalid hex-value for objectid provided")
+
     pass  # TODO
 
 
 # raise an exception if not valid
 def validate_object_msg(msg_dict):
+    print("validating object msg VALIDATOR", flush=True)
+    validate_allowed_keys(msg_dict, ["type", "object"], "object")
+
+    if not msg_dict["type"] == "object":
+        raise ErrorInvalidFormat("Invalid type for object-message")
+
+    obj = msg_dict.get("object")
+    if not objects.validate_object(obj):
+        raise ErrorInvalidFormat("Invalid object provided")
+    
     pass  # TODO
 
 
@@ -385,6 +359,7 @@ def validate_msg(msg_dict):
     elif msg_type == 'getobject':
         validate_getobject_msg(msg_dict)
     elif msg_type == 'object':
+        print("validating object msg", flush=True)
         validate_object_msg(msg_dict)
     elif msg_type == 'chaintip':
         validate_chaintip_msg(msg_dict)
@@ -411,10 +386,18 @@ def handle_error_msg(msg_dict, peer_self):
 
 
 async def handle_ihaveobject_msg(msg_dict, writer):
+    obj_id = msg_dict["objectid"]
+    object = OBJECT_STORAGE.get_object(obj_id)
+    if object == None: # doesn't exist, fetch
+        await write_msg(writer, mk_getobject_msg(obj_id))
     pass  # TODO
 
 
 async def handle_getobject_msg(msg_dict, writer):
+    object_dict = OBJECT_STORAGE.get_object(msg_dict["objectid"])
+    if object_dict == None:
+        raise ErrorUnknownObject(f"No object with id {msg_dict['objectid']}")
+    await write_msg(writer, mk_object_msg(object_dict))
     pass  # TODO
 
 
@@ -464,6 +447,47 @@ async def del_verify_block_task(task, objid):
 
 # what to do when an object message arrives
 async def handle_object_msg(msg_dict, peer_self, writer):
+    msg_object = msg_dict.get("object")
+    if msg_object["type"] == "transaction":
+        # verify transaction, generally is valid already
+        if "inputs" in msg_object: # is transaction, not coinbase object
+            # copy object & remove signature (necessary for tx-verification)
+            tx_dict = copy.deepcopy(msg_object)
+            out_new = []
+            for item in tx_dict["inputs"]:
+                item["sig"] = None
+                out_new.append(item)
+            tx_dict["inputs"] = out_new
+
+            for t_input in msg_object.get("inputs"):
+                outpoint = t_input.get("outpoint")
+                signature = t_input.get("sig")
+
+                ref_object = OBJECT_STORAGE.get_object(outpoint.get("txid"))
+                if ref_object == None:
+                    # TODO
+                    # object not found, think we can ignore this for now?
+                    pass
+
+                # check that output exists
+                out_idx = int(outpoint.get("index"))
+                outputs = ref_object.get("outputs", [])
+                if len(outputs) < out_idx:
+                    raise ExceptionInvalidOutpoint(f"No outpoint with index {out_idx} in transaction {outpoint}")
+
+                ref_output = outputs[out_idx]
+                if not objects.verify_tx_signature(tx_dict, signature, ref_output.get("pubkey")):
+                    raise ExceptionInvalidSignature("Could not verify signature")
+
+
+    oid = objects.get_objid(msg_object)
+    OBJECT_STORAGE.store_object(oid, msg_dict.get("object"))
+
+    msg = mk_ihaveobject_msg(oid)
+
+    # emit new (& valid) object to all peers
+    for _,q in CONNECTIONS.items():
+        await q.put(msg)
     pass  # TODO
 
 
@@ -490,6 +514,8 @@ async def handle_mempool_msg(msg_dict):
 
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
+    # right now only used for broadcasting messages to all peers
+    await write_msg(writer, msg_dict)
     pass  # TODO
 
 
@@ -552,7 +578,6 @@ async def handle_connection(reader, writer):
                 continue
 
             try:
-
                 msg = parse_msg(msg_str)
                 validate_msg(msg)
 
@@ -677,6 +702,9 @@ async def init():
     global TX_WAIT_LOCK
     TX_WAIT_LOCK = asyncio.Condition()
 
+    global OBJECT_STORAGE
+    OBJECT_STORAGE = ObjectStore()
+
     # PEERS.update(peer_db.load_peers())
 
     bootstrap_task = asyncio.create_task(bootstrap())
@@ -688,11 +716,11 @@ async def init():
         print("Open connections: {}".format(set(CONNECTIONS.keys())))
 
         # Open more connections if necessary
-        resupply_connections()
+        # resupply_connections()
 
         await asyncio.sleep(const.SERVICE_LOOP_DELAY)
 
-    await bootstrap_task
+    # await bootstrap_task
     await listen_task
 
 

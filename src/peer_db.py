@@ -1,7 +1,7 @@
 from Peer import Peer
 from typing import Iterable, Set
 
-PEER_DB_FILE = "peers.csv"
+PEER_DB_FILE = "/peers/peers.csv"
 
 
 def store_peer(peer: Peer, existing_peers: Iterable[Peer] = None):

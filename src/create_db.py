@@ -1,54 +1,20 @@
-import sqlite3
+import shelve
 
-import objects
-import constants as const
+class ObjectStore:
+    prefix = "/peers/"
+    db = None
 
-def main():
-    con = sqlite3.connect(const.DB_NAME)
-    try:
-        cur = con.cursor()
+    def __init__(self, fname="object.store"):
+        self.db = shelve.open(f"{self.prefix}{fname}")
+        pass
 
-        cur.execute("""CREATE TABLE IF NOT EXISTS tx (
-        id TEXT PRIMARY KEY,
-        height INTEGER,
-        block references block(id)
-        )""")
+    def close(self):
+        self.db.close()
 
-        cur.execute("""CREATE TABLE IF NOT EXISTS outputs (
-        output_id SERIAL PRIMARY KEY,
-        tx TEXT references tx(id),
-        pubkey TEXT,
-        val INTEGER,
-        idx INTEGER
-        """)
+    def store_object(self, key, value):
+        self.db[key] = value
 
-        cur.execute("""CREATE TABLE IF NOT EXISTS inputs (
-        input_id SERIAL PRIMARY KEY,
-        tx TEXT references tx(id),
-        sig TEXT,
-        outpoint references outputs(output_id)
-        """)
-
-        cur.execute("""CREATE TABLE IF NOT EXISTS block(
-        id TEXT PRIMARY KEY,
-        target TEXT,
-        created TEXT,
-        miner TEXT,
-        nonce TEXT,
-        note TEXT,
-        previd INTEGER references block(id)
-        """)
-
-        cur.execute(f"""INSERT into block (id, target, created, miner, nonce, note, previd)
-                    values ({const.GENESIS_BLOCK_ID},{const.GENESIS_BLOCK.get("T")},{const.GENESIS_BLOCK.get("created")},{const.GENESIS_BLOCK.get("miner")}, 
-                    {const.GENESIS_BLOCK.get("nonce")}, {const.GENESIS_BLOCK.get("note")}, null)""")
-
-    except Exception as e:
-        con.rollback()
-        print(str(e))
-    finally:
-        con.close()
-
-
-if __name__ == "__main__":
-    main()
+    def get_object(self, key):
+        if key in self.db:
+            return self.db[key]
+        return None

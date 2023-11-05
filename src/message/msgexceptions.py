@@ -38,3 +38,24 @@ class ErrorUnknownObject(FaultyNodeException):
         self.message = message
         self.error_name = "UNKNOWN_OBJECT"
         super().__init__(self.message, self.error_name)
+
+
+class ExceptionInvalidSignature(FaultyNodeException):
+    def __init__(self, message) -> None:
+        self.message = message
+        self.error_name = "INVALID_TX_SIGNATURE"
+        super().__init__(self.message, self.error_name)
+
+
+class ExceptionInvalidOutpoint(FaultyNodeException):
+    def __init__(self, message) -> None:
+        self.message = message
+        self.error_name = "INVALID_TX_OUTPOINT"
+        super().__init__(self.message, self.error_name)
+
+
+class ExceptionInvalidConservation(FaultyNodeException):
+    def __init__(self, message) -> None:
+        self.message = message
+        self.error_name = "INVALID_TX_CONSERVATION"
+        super().__init__(self.message, self.error_name)

@@ -78,10 +78,10 @@ def validate_transaction(trans_dict):
     objID = get_objid(trans_dict)
     if not validate_objectid(objID):
         return False
-    for i in trans_dict.get("inputs"):
+    for i in trans_dict.get("inputs", []):
         if not validate_transaction_input(i):
             return False
-    for i in trans_dict.get("outputs"):
+    for i in trans_dict.get("outputs", []):
         if not validate_transaction_output(i):
             return False
     return True
@@ -98,7 +98,7 @@ def validate_block(block_dict):
     if block_dict.get("previd"):
         if not validate_objectid(block_dict.get("previd")):
             return False
-    if block_dict.get("txids") > 0:
+    if len(block_dict.get("txids", [])) > 0:
         for i in block_dict.get("txids"):
             if not validate_objectid(i):
                 return False
@@ -115,7 +115,8 @@ def validate_object(obj_dict):
 
 def get_objid(obj_dict):
     h = hashlib.blake2s()
-    h.update(canonicalize(obj_dict))
+    canon = canonicalize(obj_dict)
+    h.update(canon)
     return h.hexdigest()
 
 
@@ -132,14 +133,24 @@ def verify_tx_signature(tx_dict, sig, pubkey):
         sig_bytes = bytes.fromhex(sig)
 
         # Serialize and hash the message
-        message = json.dumps(tx_dict, sort_keys=True).encode('utf-8')
-        message_hash = hashlib.sha256(message).digest()
+        message = canonicalize(tx_dict)
+        print(f"==============================\nVerifying signature: {sig}\npubkey: {pubkey}\ndictionary:\t{message}\n==============================")
+        h = hashlib.sha256()
+        h.update(message)
+        message_hash = h.digest()
+        print("obtained message bytes", flush=True)
 
         # Verify the signature
         public_key.verify(sig_bytes, message_hash)
 
+        print("verified!", flush=True)
+
         return True  # Signature is valid
-    except (ValueError, InvalidSignature):
+    except ValueError as e:
+        print(f"ValueError Exception: {e}", flush=True)
+        return False  # Signature is invalid
+    except InvalidSignature as e:
+        print(f"Signature invalid: {e}", flush=True)
         return False  # Signature is invalid
 
 
