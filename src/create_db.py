@@ -1,20 +1,38 @@
-import shelve
+import sqlite3
 
-class ObjectStore:
-    prefix = "/peers/"
-    db = None
+import objects
+import constants as const
+import os
 
-    def __init__(self, fname="object.store"):
-        self.db = shelve.open(f"{self.prefix}{fname}")
-        pass
+def dropDB():
+    os.path.unlink(const.DB_NAME)
 
-    def close(self):
-        self.db.close()
+def createDB():
+    print('Creating database now')
+    con = sqlite3.connect(const.DB_NAME)
+    try:
+        cur = con.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS objects(oid VARCHAR(64) PRIMARY KEY, obj TEXT NOT NULL)")
 
-    def store_object(self, key, value):
-        self.db[key] = value
+        # Preload genesis block
+        res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (const.GENESIS_BLOCK_ID,))
+        if res.fetchone() is None:
+            gen_id = objects.get_objid(const.GENESIS_BLOCK)
+            if gen_id != const.GENESIS_BLOCK_ID:
+                raise Exception("Invalid genesis block!")
 
-    def get_object(self, key):
-        if key in self.db:
-            return self.db[key]
-        return None
+            gen_str = objects.canonicalize(const.GENESIS_BLOCK).decode('utf-8')
+
+            cur.execute("INSERT INTO objects VALUES(?, ?)", (gen_id, gen_str))
+
+        con.commit()
+
+    except Exception as e:
+        con.rollback()
+        print(str(e))
+    finally:
+        con.close()
+
+
+if __name__ == "__main__":
+    createDB()

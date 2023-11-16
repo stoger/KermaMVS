@@ -5,6 +5,10 @@ run:
 
 clean: remove-submission remove-test
 	# add further actions if needed
+	rm -f src/db.db
+	rm -f src/peers.json
+	rm -rf src/__pycache__
+	rm -rf src/message/__pycache__
 
 build:
 	pip3 install --no-cache-dir -r src/requirements.txt

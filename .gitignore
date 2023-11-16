@@ -1,2 +1,7 @@
-﻿src/__pycache__
-src/message/__pycache__
+__pycache__
+message/__pycache__
+*.swp
+.vscode/
+peers.json
+.idea
+db.db

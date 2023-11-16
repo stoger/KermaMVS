@@ -6,4 +6,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ .
 
+CMD [ "rm", "peers.json" ]
+
+CMD [ "rm", "db.db" ]
+
 CMD [ "python", "-u", "main.py" ]
