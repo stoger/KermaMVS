@@ -1,3 +1,5 @@
+from typing import List
+
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 from datetime import datetime
@@ -14,24 +16,35 @@ import constants as const
 
 # perform syntactic checks. returns true iff check succeeded
 OBJECTID_REGEX = re.compile("^[0-9a-f]{64}$")
+
+
 def validate_objectid(objid_str):
     if not isinstance(objid_str, str):
         return False
     return OBJECTID_REGEX.match(objid_str)
 
+
 PUBKEY_REGEX = re.compile("^[0-9a-f]{64}$")
+
+
 def validate_pubkey(pubkey_str):
     if not isinstance(pubkey_str, str):
         return False
     return PUBKEY_REGEX.match(pubkey_str)
 
+
 SIGNATURE_REGEX = re.compile("^[0-9a-f]{128}$")
+
+
 def validate_signature(sig_str):
     if not isinstance(sig_str, str):
         return False
     return SIGNATURE_REGEX.match(sig_str)
 
+
 NONCE_REGEX = re.compile("^[0-9a-f]{64}$")
+
+
 def validate_nonce(nonce_str):
     if not isinstance(nonce_str, str):
         return False
@@ -39,10 +52,13 @@ def validate_nonce(nonce_str):
 
 
 TARGET_REGEX = re.compile("^[0-9a-f]{64}$")
+
+
 def validate_target(target_str):
     if not isinstance(target_str, str):
         return False
     return TARGET_REGEX.match(target_str)
+
 
 # syntactic checks
 def validate_transaction_input(in_dict):
@@ -80,7 +96,8 @@ def validate_transaction_input(in_dict):
     if len(set(in_dict.keys()) - set(['sig', 'outpoint'])) != 0:
         raise ErrorInvalidFormat("Additional keys present!")
 
-    return True # syntax check done
+    return True  # syntax check done
+
 
 # syntactic checks
 def validate_transaction_output(out_dict):
@@ -104,19 +121,20 @@ def validate_transaction_output(out_dict):
     if len(set(out_dict.keys()) - set(['pubkey', 'value'])) != 0:
         raise ErrorInvalidFormat("Additional keys present!")
 
-    return True # syntax check done
+    return True  # syntax check done
+
 
 # syntactic checks
 def validate_transaction(trans_dict):
     if not isinstance(trans_dict, dict):
-        raise ErrorInvalidFormat("Transaction object invalid: Not a dictionary!") # assert: false
+        raise ErrorInvalidFormat("Transaction object invalid: Not a dictionary!")  # assert: false
 
     if 'type' not in trans_dict:
-        raise ErrorInvalidFormat("Transaction object invalid: Type not set") # assert: false
+        raise ErrorInvalidFormat("Transaction object invalid: Type not set")  # assert: false
     if not isinstance(trans_dict['type'], str):
-        raise ErrorInvalidFormat("Transaction object invalid: Type not a string") # assert: false
+        raise ErrorInvalidFormat("Transaction object invalid: Type not a string")  # assert: false
     if not trans_dict['type'] == 'transaction':
-        raise ErrorInvalidFormat("Transaction object invalid: Type not 'transaction'") # assert: false
+        raise ErrorInvalidFormat("Transaction object invalid: Type not 'transaction'")  # assert: false
 
     if 'outputs' not in trans_dict:
         raise ErrorInvalidFormat("Transaction object invalid: No outputs key set")
@@ -164,7 +182,7 @@ def validate_transaction(trans_dict):
     if len(set(trans_dict.keys()) - set(['type', 'inputs', 'outputs'])) != 0:
         raise ErrorInvalidFormat(f"Normal transaction object invalid: Additional key present")
 
-    return True # syntax check done
+    return True  # syntax check done
 
 
 # syntactic checks
@@ -173,7 +191,7 @@ def validate_block(block_dict):
     valid_keys = set(['type', 'T', 'created', 'miner', 'note', 'nonce', 'previd', 'txids'])
 
     if not isinstance(block_dict, dict):
-        raise ErrorInvalidFormat("Block object not valid: Not a Dictionary!") # assert false
+        raise ErrorInvalidFormat("Block object not valid: Not a Dictionary!")  # assert false
 
     if "type" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'type'!")
@@ -191,7 +209,8 @@ def validate_block(block_dict):
     if "created" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'created'!")
     if not isinstance(block_dict["created"], int):
-        raise ErrorInvalidFormat(f"Block object not valid: Invalid type ({type(block_dict['created'])}) for field 'created'!")
+        raise ErrorInvalidFormat(
+            f"Block object not valid: Invalid type ({type(block_dict['created'])}) for field 'created'!")
     try:
         create_time = datetime.fromtimestamp(block_dict["created"])
     except (OverflowError, OSError):
@@ -202,44 +221,52 @@ def validate_block(block_dict):
 
     if "nonce" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'nonce'!")
-    if validate_nonce(block_dict['nonce']):
+    if not validate_nonce(block_dict['nonce']):
         raise ErrorInvalidFormat("Block object not valid: 'nonce' is not a valid 32-byte hexified value!")
 
-    if not "previd" in block_dict:
+    if "previd" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'previd'!")
     if not validate_objectid(block_dict['previd']):
         # TODO: if is genesis-block, None (null) is allowed
-        if not block_dict['previd'] == None:
+
+        if not block_dict['previd'] is None:
             raise ErrorInvalidFormat("Block object not valid: Field 'previd' is invalid!")
-    
-    if not "txids" in block_dict:
+
+    if "txids" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Field 'txids' is missing!")
-    if not isinstance(block_dict["txids"], []):
-        raise ErrorInvalidFormat("Block object not valid: Field 'txids' must be an array!")
-    
+    if not isinstance(block_dict["txids"], list):
+        raise ErrorInvalidFormat("Block object not valid: Field 'txids' must be a list!")
+
     # TODO: validate txids
+
+    for tx in block_dict['txids']:
+        if not validate_objectid(tx):
+            raise ErrorInvalidFormat(f"Block object not valid: Transaction {tx} invalid!")
 
     if "miner" in block_dict:
         if not isinstance(block_dict["miner"], str):
             raise ErrorInvalidFormat("Block object not valid: Field 'miner' must be str!")
         if not re.match(r"[ -~]{1,128}", block_dict["miner"]):
-            raise ErrorInvalidFormat("Block object not valid: Field 'miner' must be ASCII-printable characters up to length of 128!")
-        
+            raise ErrorInvalidFormat(
+                "Block object not valid: Field 'miner' must be ASCII-printable characters up to length of 128!")
+
     if "note" in block_dict:
         if not isinstance(block_dict["note"], str):
             raise ErrorInvalidFormat("Block object not valid: Field 'note' must be str!")
         if not re.match(r"[ -~]{1,128}", block_dict['note']):
-            raise ErrorInvalidFormat("Block object not valid: Field 'note' must be ASCII-printable characters up to length 128!")
+            raise ErrorInvalidFormat(
+                "Block object not valid: Field 'note' must be ASCII-printable characters up to length 128!")
 
     if len(set(block_dict.keys()) - valid_keys) != 0:
         raise ErrorInvalidFormat("Block object not valid: Additional keys present in object!")
-        
-    # TODO: Proof of work - or is it this?
+
+    # verify PoW
     block_id = get_objid(block_dict)
     if not int(block_id, 16) < int(block_dict['T'], 16):
         raise ErrorInvalidFormat("Block object not valid: Invalid proof-of-work")
 
     return True
+
 
 # syntactic checks
 def validate_object(obj_dict):
@@ -259,11 +286,14 @@ def validate_object(obj_dict):
 
     raise ErrorInvalidFormat("Object invalid: Unknown object type")
 
+
 def expand_object(obj_str):
     return json.loads(obj_str)
 
+
 def get_objid(obj_dict):
     return hashlib.blake2s(canonicalize(obj_dict)).hexdigest()
+
 
 # perform semantic checks
 
@@ -284,60 +314,74 @@ def verify_tx_signature(tx_dict, sig, pubkey):
 
     return True
 
+
 class TXVerifyException(Exception):
     pass
+
 
 # semantic checks
 # assert: tx_dict is syntactically valid
 def verify_transaction(tx_dict, input_txs):
     # coinbase transaction
     if 'height' in tx_dict:
-        return # assume all syntactically valid coinbase transactions are valid
+        if not isinstance(tx_dict['height'], int) or tx_dict['height'] < 0:
+            raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has invalid height!")
+        if "inputs" in tx_dict:
+            raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has inputs!")
+        if len(tx_dict['outputs']) != 1:
+            raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has none or more than one output!")
+        if not validate_pubkey(tx_dict['outputs']['pubkey']):
+            raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has an invalid pubkey!")
+        return True
+    else:
+        # regular transaction
+        insum = 0  # sum of input values
+        in_dict = dict()
+        for i in tx_dict['inputs']:
+            ptxid = i['outpoint']['txid']
+            ptxidx = i['outpoint']['index']
 
-    # regular transaction
-    insum = 0 # sum of input values
-    in_dict = dict()
-    for i in tx_dict['inputs']:
-        ptxid = i['outpoint']['txid']
-        ptxidx = i['outpoint']['index']
-
-        if ptxid in in_dict:
-            if ptxidx in in_dict[ptxid]:
-                raise ErrorInvalidTxConservation(f"The same input ({ptxid}, {ptxidx}) was used multiple times in this transaction")
+            if ptxid in in_dict:
+                if ptxidx in in_dict[ptxid]:
+                    raise ErrorInvalidTxConservation(
+                        f"The same input ({ptxid}, {ptxidx}) was used multiple times in this transaction")
+                else:
+                    in_dict[ptxid].add(ptxidx)
             else:
-                in_dict[ptxid].add(ptxidx)
-        else:
-            in_dict[ptxid] = {ptxidx}
+                in_dict[ptxid] = {ptxidx}
 
-        if ptxid not in input_txs:
-            raise ErrorUnknownObject(f"Transaction {ptxid} not known")
+            if ptxid not in input_txs:
+                raise ErrorUnknownObject(f"Transaction {ptxid} not known")
 
-        ptx_dict = input_txs[ptxid]
+            ptx_dict = input_txs[ptxid]
 
-        # just to be sure
-        if ptx_dict['type'] != 'transaction':
-            raise ErrorInvalidFormat("Previous TX '{}' is not a transaction!".format(ptxid))
+            # just to be sure
+            if ptx_dict['type'] != 'transaction':
+                raise ErrorInvalidFormat("Previous TX '{}' is not a transaction!".format(ptxid))
 
-        if ptxidx >= len(ptx_dict['outputs']):
-            raise ErrorInvalidTxOutpoint("Invalid output index in previous TX '{}'!".format(ptxid))
+            if ptxidx >= len(ptx_dict['outputs']):
+                raise ErrorInvalidTxOutpoint("Invalid output index in previous TX '{}'!".format(ptxid))
 
-        output = ptx_dict['outputs'][ptxidx]
-        if not verify_tx_signature(tx_dict, i['sig'], output['pubkey']):
-            raise ErrorInvalidTxSignature("Invalid signature from previous TX '{}'!".format(ptxid))
+            output = ptx_dict['outputs'][ptxidx]
+            if not verify_tx_signature(tx_dict, i['sig'], output['pubkey']):
+                raise ErrorInvalidTxSignature("Invalid signature from previous TX '{}'!".format(ptxid))
 
-        insum = insum + output['value']
+            insum = insum + output['value']
 
-    if insum < sum([o['value'] for o in tx_dict['outputs']]):
-        raise ErrorInvalidTxConservation("Sum of inputs < sum of outputs!")
+        if insum < sum([o['value'] for o in tx_dict['outputs']]):
+            raise ErrorInvalidTxConservation("Sum of inputs < sum of outputs!")
+
 
 class BlockVerifyException(Exception):
     pass
+
 
 # apply tx to utxo
 # returns mining fee
 def update_utxo_and_calculate_fee(tx, utxo):
     # todo
     return 0
+
 
 # verify that a block is valid in the current chain state, using known transactions txs
 def verify_block(block, prev_block, prev_utxo, prev_height, txs):
