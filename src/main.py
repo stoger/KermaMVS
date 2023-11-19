@@ -1,4 +1,5 @@
 from asyncio import sleep
+from datetime import datetime
 
 from Peer import Peer
 from peers import Peers
@@ -553,6 +554,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
         # already have object
         if not res.fetchone() is None:
             # object has already been verified as it is in the DB
+            print(f"Object {objid} already known!")
             return
 
         print("Received new object '{}'".format(objid))
@@ -561,6 +563,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             prev_txs = gather_previous_txs(cur, obj_dict)
             objects.verify_transaction(obj_dict, prev_txs)
         else:
+
             # we have a block-object
             txids = obj_dict['txids']
             print(f"got txids {txids}", flush=True)
@@ -579,7 +582,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                 tx_data = txs.fetchall()
                 if len(tx_data) < len(txids):
                     print("Missing transactions, sleeping on validation.", flush=True)
-                    await sleep(0.2)
+                    await sleep(0.5)
                 else:
                     break
 
@@ -606,6 +609,21 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             # TODO: handle KeyError, i.e. tries to reference some (to us) unknown block?
             # right now is ignored, cuz will return empty set otherwise. but if only coinbase transaction in block, is ok
 
+            if "previd" in obj_dict:
+                if obj_dict["previd"] is None and len(UTXO_SETS) != 0:
+                    raise ErrorInvalidGenesis("A block other than the genesis block with parent null was received!")
+                parent = cur.execute("SELECT obj FROM objects WHERE oid = ?", (obj_dict["previd"],))
+                if parent.fetchone() is None:
+                    await write_msg(writer, mk_getobject_msg(obj_dict["previd"]))
+                    await sleep(5)
+                    parent = cur.execute("SELECT obj FROM objects WHERE oid = ?", (obj_dict["previd"],)).fetchone()
+                    if parent is None:
+                        raise ErrorUnfindableObject(f"Parent with ID {obj_dict['previd']} could not be found within 5 "
+                                                    f"seconds!")
+                    elif datetime.fromtimestamp(parent["created"]) >= datetime.fromtimestamp(obj_dict["created"]):
+                        raise ErrorInvalidBlockTimestamp(f"Timestamp of block {objid} is not strictly greater that "
+                                                         f"that of the parent block!")
+
             # Rest has to be "normal" transactions
             for idx in range(len(mapped_txs)):
                 if coinbase_output != 0 and idx == 0:
@@ -614,7 +632,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                 tx = mapped_txs[idx]
                 if "height" in tx:
                     # problematic, can only have one coinbase transaction!
-                    raise ErrorInvalidFormat("Block not valid: Multiple coinbase transactions found in block")
+                    raise ErrorInvalidBlockCoinbase("Block not valid: Multiple coinbase transactions found in block")
 
                 total_spent = 0
                 total_income = 0
@@ -881,7 +899,7 @@ async def init():
     global PEERS
     PEERS = Peers()  # this automatically loads the peers from file
 
-    # bootstrap_task = asyncio.create_task(bootstrap())
+    #bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
 
     # Service loop

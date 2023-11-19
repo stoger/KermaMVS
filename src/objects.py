@@ -204,7 +204,7 @@ def validate_block(block_dict):
     if "T" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'T'!")
     if not (validate_target(block_dict["T"]) and block_dict["T"] == req_target):
-        raise ErrorInvalidFormat(f"Block object not valid: Target ('T') must be {req_target}!")
+        raise ErrorInvalidBlockPow(f"Block object not valid: Target ('T') must be {req_target}!")
 
     if "created" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'created'!")
@@ -217,7 +217,7 @@ def validate_block(block_dict):
         raise ErrorInvalidFormat("Block object not valid: Field 'created' could not be parsed as timestamp!")
     now = datetime.now()
     if not create_time < now:
-        raise ErrorInvalidFormat("Block object not valid: Field 'created' cannot be in future!")
+        raise ErrorInvalidBlockTimestamp("Block object not valid: Field 'created' cannot be in future!")
 
     if "nonce" not in block_dict:
         raise ErrorInvalidFormat("Block object not valid: Missing field 'nonce'!")
@@ -263,7 +263,7 @@ def validate_block(block_dict):
     # verify PoW
     block_id = get_objid(block_dict)
     if not int(block_id, 16) < int(block_dict['T'], 16):
-        raise ErrorInvalidFormat("Block object not valid: Invalid proof-of-work")
+        raise ErrorInvalidBlockPow("Block object not valid: Invalid proof-of-work")
 
     return True
 
@@ -330,7 +330,7 @@ def verify_transaction(tx_dict, input_txs):
             raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has inputs!")
         if len(tx_dict['outputs']) != 1:
             raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has none or more than one output!")
-        if not validate_pubkey(tx_dict['outputs']['pubkey']):
+        if not validate_pubkey(tx_dict['outputs'][0]['pubkey']):
             raise ErrorInvalidFormat("Invalid Transaction: Coinbase transaction has an invalid pubkey!")
         return True
     else:
