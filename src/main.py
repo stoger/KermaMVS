@@ -563,7 +563,6 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             prev_txs = gather_previous_txs(cur, obj_dict)
             objects.verify_transaction(obj_dict, prev_txs)
         else:
-
             # we have a block-object
             txids = obj_dict['txids']
             print(f"got txids {txids}", flush=True)
@@ -592,13 +591,36 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             print(f"mapped tx: {mapped_txs}", flush=True)
             objid = objects.get_objid(obj_dict)
 
+            query = """
+                WITH RECURSIVE BlockChain AS (
+                    SELECT oid, previd, 0 as distance
+                    FROM objects
+                    WHERE oid = ?
+                    UNION
+                    SELECT b.oid, b.previd, bc.distance + 1
+                    FROM objects b
+                    JOIN BlockChain bc ON b.oid = bc.previd
+                )
+                SELECT *
+                FROM BlockChain
+                WHERE oid = ?;
+            """
+
+            dist_res_obj = cur.execute(query, (obj_dict["previd"], const.GENESIS_BLOCK_ID))
+            dist_res = dist_res_obj.fetchone()
+            distance = 0
+            if dist_res is not None:
+                distance = 1 + int(dist_res, 10)
+
+            print(f"located distance of {dist_res}")
+
             # validate all transactions - this necessary? only valid ones are stored after all...
             # for tx in mapped_txs:
             #     objects.validate_transaction(tx)
 
             cbase = mapped_txs[0]
             cbase_id = ""
-            coinbase_output = -1
+            coinbase_output = -1 
             if "height" in cbase:
                 # we have a coinbase transaction!
                 # also already validated, only really need value
@@ -663,7 +685,11 @@ async def handle_object_msg(msg_dict, peer_self, writer):
 
         # don't think objects.canonicalize() is right, we don't have that defined(?) should probably just be (jcs.)canonicalize
         obj_str = objects.canonicalize(obj_dict).decode('utf-8')
-        cur.execute("INSERT INTO objects VALUES(?, ?)", (objid, obj_str))
+        previd = None
+        if obj_dict["type"] == "block":
+            previd = obj_dict["previd"]
+
+        cur.execute("INSERT INTO objects VALUES(?, ?, ?)", (objid, previd, obj_str))
         con.commit()
     except NodeException as e:  # whatever the reason, just reject this
         con.rollback()

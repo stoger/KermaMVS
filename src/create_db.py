@@ -12,7 +12,7 @@ def createDB():
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS objects(oid VARCHAR(64) PRIMARY KEY, obj TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS objects(oid VARCHAR(64) PRIMARY KEY, previd VARCHAR(64), obj TEXT NOT NULL)")
 
         # Preload genesis block
         res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (const.GENESIS_BLOCK_ID,))
@@ -23,7 +23,7 @@ def createDB():
 
             gen_str = objects.canonicalize(const.GENESIS_BLOCK).decode('utf-8')
 
-            cur.execute("INSERT INTO objects VALUES(?, ?)", (gen_id, gen_str))
+            cur.execute("INSERT INTO objects VALUES(?, ?, ?)", (gen_id, None, gen_str))
 
         con.commit()
 
