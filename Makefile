@@ -16,8 +16,13 @@ build:
 # add own tests if you want
 run-tests:
 	# Perform a simple connection check   
-	nc -zv localhost 18018	
- 
+	nc -zv localhost 18018
+
+run-custom-tests:
+	# Test the given objects
+	timeout 5 nc localhost 18018 < testcases.txt
+	docker-compose down
+
 
 # don't touch these targets 
 docker-build:

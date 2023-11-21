@@ -170,9 +170,12 @@ def validate_transaction(trans_dict):
 
     if not isinstance(trans_dict['inputs'], list):
         raise ErrorInvalidFormat("Normal transaction object invalid: Inputs not a list")
-    for input in trans_dict['inputs']:
+
+    index = 0
+    for input_tx in trans_dict['inputs']:
+        print(f"validating {input_tx}")
         try:
-            validate_transaction_input(input)
+            validate_transaction_input(input_tx)
         except ErrorInvalidFormat as e:
             raise ErrorInvalidFormat(f"Normal transaction object invalid: Input at index {index} invalid: {e.message}")
         index += 1

@@ -557,7 +557,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             print(f"Object {objid} already known!")
             return
 
-        print("Received new object '{}'".format(objid))
+        # print("Received new object '{}'".format(objid))
 
         if obj_dict['type'] == 'transaction':
             prev_txs = gather_previous_txs(cur, obj_dict)
@@ -565,35 +565,36 @@ async def handle_object_msg(msg_dict, peer_self, writer):
         else:
             # we have a block-object
             txids = obj_dict['txids']
-            print(f"got txids {txids}", flush=True)
             for txid in txids:
-                print(f"fetching obj with id {txid} {type(txid)}", flush=True)
                 tx = cur.execute("SELECT obj FROM objects WHERE oid = ?", (txid,))
-                print(f"found value: {tx.fetchone()}", flush=True)
-                if tx.fetchone() is None:
+                found_value = tx.fetchone()
+                if found_value is None:
                     # request object
-                    print("asking for object with id", flush=True)
                     await write_msg(writer, mk_getobject_msg(txid))
 
             # wait until we have all tx-objects in our db
+            txset = set(txids)
+
+            sleep_sum = 0
             while True:
-                txs = cur.execute("SELECT obj FROM objects WHERE oid IN (?)", (",".join(txids),))
+                sql_query = f"SELECT obj FROM objects WHERE oid IN ({','.join('?' * len(txids))})"
+                txs = cur.execute(sql_query, txids)
                 tx_data = txs.fetchall()
-                if len(tx_data) < len(txids):
-                    print("Missing transactions, sleeping on validation.", flush=True)
+                if len(tx_data) < len(txset):
+                    if sleep_sum > 5:
+                        raise ErrorUnfindableObject("Block object invalid: Not all tx could be fetched in 5s")
+
+                    sleep_sum += 0.5
                     await sleep(0.5)
                 else:
                     break
 
-            print("validation resumes")
-            # TODO: not sure if this works. think it's stored as bytes
-            mapped_txs = [json.loads(x[0]) for x in tx_data]
-            print(f"mapped tx: {mapped_txs}", flush=True)
+            mapped_txs = [json.loads(x[0]) for x in tx_data]  # maybe make dict instead
             objid = objects.get_objid(obj_dict)
 
             query = """
                 WITH RECURSIVE BlockChain AS (
-                    SELECT oid, previd, 0 as distance
+                    SELECT oid, previd, 1 as distance
                     FROM objects
                     WHERE oid = ?
                     UNION
@@ -601,35 +602,28 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                     FROM objects b
                     JOIN BlockChain bc ON b.oid = bc.previd
                 )
-                SELECT *
+                SELECT distance
                 FROM BlockChain
                 WHERE oid = ?;
             """
 
             dist_res_obj = cur.execute(query, (obj_dict["previd"], const.GENESIS_BLOCK_ID))
-            dist_res = dist_res_obj.fetchone()
+            dist_res = dist_res_obj.fetchone()[0]
             distance = 0
             if dist_res is not None:
-                distance = 1 + int(dist_res, 10)
-
-            print(f"located distance of {dist_res}")
-
-            # validate all transactions - this necessary? only valid ones are stored after all...
-            # for tx in mapped_txs:
-            #     objects.validate_transaction(tx)
+                distance = int(dist_res)
 
             cbase = mapped_txs[0]
-            cbase_id = ""
-            coinbase_output = -1 
+            coinbase_output = -1
             if "height" in cbase:
                 # we have a coinbase transaction!
                 # also already validated, only really need value
-                # TODO: Must also verify height corresponds to block-height? don't have block height implemented yet tho
+                if cbase["height"] != distance:
+                    raise ErrorInvalidBlockCoinbase("Block invalid: coinbase transaction with invalid height found")
+
                 coinbase_output = int(cbase["outputs"][0]["value"])
 
             utxo = UTXO_SETS.get(obj_dict["previd"], set())
-            # TODO: handle KeyError, i.e. tries to reference some (to us) unknown block?
-            # right now is ignored, cuz will return empty set otherwise. but if only coinbase transaction in block, is ok
 
             if "previd" in obj_dict:
                 if obj_dict["previd"] is None and len(UTXO_SETS) != 0:
@@ -647,17 +641,19 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                                                          f"that of the parent block!")
 
             # Rest has to be "normal" transactions
+            total_output = 0
+            total_income = 0
+
             for idx in range(len(mapped_txs)):
                 if coinbase_output != 0 and idx == 0:
                     continue  # skip coinbase transaction we already found
 
                 tx = mapped_txs[idx]
+                txid = objects.get_objid(tx)
+
                 if "height" in tx:
                     # problematic, can only have one coinbase transaction!
                     raise ErrorInvalidBlockCoinbase("Block not valid: Multiple coinbase transactions found in block")
-
-                total_spent = 0
-                total_income = 0
 
                 for input_tx in tx["inputs"]:
                     out_tx = input_tx["outpoint"]["txid"]
@@ -665,25 +661,31 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                     utxo_tuple = (out_tx, out_idx)
                     if utxo_tuple not in utxo:
                         # trying to spend from something that doesn't exist!
-                        raise ErrorInvalidFormat("Block invalid: Transaction input already spent")
+                        raise ErrorInvalidTxConservation("Block invalid: Transaction input already spent")
 
                     utxo.remove(utxo_tuple)
+                    js_data = json.loads(cur.execute("SELECT obj FROM objects WHERE oid = ?", (out_tx,)).fetchone()[0])
+                    total_income += int(js_data["outputs"][out_idx]["value"])
 
-                for output_id in range(len(tx["outputs"])):
-                    utxo.add((tx["outputs"][output_id], output_id))
+                for idx in range(len(tx["outputs"])):
+                    total_output += int(tx["outputs"][idx]["value"])
+                    utxo.add((txid, idx))
 
-            # TODO: Ensure is at least mining cost + transaction fee
-            # What are transaction fees..?
-            # What is love?
+                if total_income < total_output:
+                    raise ErrorInvalidFormat("Block invalid: Transaction fees not covered")
+
             if coinbase_output > 0:
-                utxo.add((objid, 0))
+                fees = total_income - total_output
 
-            # TODO: Validate all transactions, update UTXO set
-            # raise ErrorInvalidFormat("Received an object which is not a transaction, rejecting for now")
+                if coinbase_output < (fees + const.BLOCK_REWARD):
+                    raise ErrorInvalidTxConservation("Block object invalid: Block reward does not cover fees")
 
+                txid = objects.get_objid(mapped_txs[0])
+                utxo.add((txid, 0))
+
+            UTXO_SETS[objid] = utxo
         print("Adding new object '{}'".format(objid))
 
-        # don't think objects.canonicalize() is right, we don't have that defined(?) should probably just be (jcs.)canonicalize
         obj_str = objects.canonicalize(obj_dict).decode('utf-8')
         previd = None
         if obj_dict["type"] == "block":
@@ -696,6 +698,8 @@ async def handle_object_msg(msg_dict, peer_self, writer):
         print("Failed to verify TX '{}': {}".format(objid, str(e)))
         raise e  # and re-raise this
     except Exception as e:
+        print("something went wrong...")
+        print(e)
         con.rollback()
         raise e
     finally:
@@ -925,7 +929,7 @@ async def init():
     global PEERS
     PEERS = Peers()  # this automatically loads the peers from file
 
-    #bootstrap_task = asyncio.create_task(bootstrap())
+    bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
 
     # Service loop
