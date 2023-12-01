@@ -538,7 +538,7 @@ async def handle_object_msg(msg_dict, queue):
         elif obj_dict['type'] == 'block':
             # check if parent block height is height of object plus 1
             parent_id = obj_dict['previd']
-            res = cur.execute("SELECT height FROM heights WHERE oid = ?", (parent_id,))
+            res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (parent_id,))
             # we have parent?
             parent_height = res.fetchone()
 
