@@ -558,7 +558,7 @@ async def handle_object_msg(msg_dict, queue):
 
             objects.store_block(obj_dict, new_utxo, height, cur)
             if LONGEST_CHAIN['height'] < height:
-                LONGEST_CHAIN['blockid'] = obj_dict['objid']
+                LONGEST_CHAIN['blockid'] = objects.get_objid(obj_dict)
                 LONGEST_CHAIN['height'] = height
             # store_block_utxo_height(obj_dict, new_utxo, height)
         else:
@@ -602,7 +602,7 @@ def get_chaintip_blockid():
 
 
 async def handle_getchaintip_msg(msg_dict, writer):
-    return write_msg(writer, mk_chaintip_msg(get_chaintip_blockid()))
+    await write_msg(writer, mk_chaintip_msg(get_chaintip_blockid()))
 
 
 async def handle_getmempool_msg(msg_dict, writer):
@@ -618,7 +618,7 @@ async def handle_chaintip_msg(msg_dict, writer):
         res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (blockid,))
 
         # already have object
-        if not res.fetchone() is not None:
+        if not res.fetchone() is None:
             pass
         else:
             await write_msg(writer, mk_getobject_msg(blockid))
@@ -728,7 +728,7 @@ async def handle_connection(reader, writer):
                 elif msg_type == 'getchaintip':
                     await handle_getchaintip_msg(msg, writer)
                 elif msg_type == 'chaintip':
-                    await handle_chaintip_msg(msg)
+                    await handle_chaintip_msg(msg, writer)
                 elif msg_type == 'getmempool':
                     await handle_getmempool_msg(msg, writer)
                 elif msg_type == 'mempool':
