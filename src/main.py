@@ -32,6 +32,7 @@ LISTEN_CFG = {
     "address": const.ADDRESS,
     "port": const.PORT
 }
+LONGEST_CHAIN = {"blockid": const.GENESIS_BLOCK_ID, "height": 0}
 
 
 # Add peer to your list of peers
@@ -281,7 +282,10 @@ def validate_getpeers_msg(msg_dict):
 
 # raise an exception if not valid
 def validate_getchaintip_msg(msg_dict):
-    pass  # TODO
+    if msg_dict['type'] != 'getchaintip':
+        raise ErrorInvalidFormat("Message type is not 'getchaintip'!")
+
+    validate_allowed_keys(msg_dict, ['type'], 'getchaintip')
 
 
 # raise an exception if not valid
@@ -389,7 +393,9 @@ def validate_object_msg(msg_dict):
 
 # raise an exception if not valid
 def validate_chaintip_msg(msg_dict):
-    pass  # todo
+    if msg_dict['type'] != 'chaintip':
+        raise ErrorInvalidFormat("Message type is not 'chaintip'!")
+    validate_allowed_keys(msg_dict, ['type', 'blockid'], 'chaintip')
 
 
 # raise an exception if not valid
@@ -530,8 +536,30 @@ async def handle_object_msg(msg_dict, queue):
             objects.verify_transaction(obj_dict, prev_txs)
             objects.store_transaction(obj_dict, cur)
         elif obj_dict['type'] == 'block':
+            # check if parent block height is height of object plus 1
+            parent_id = obj_dict['previd']
+            res = cur.execute("SELECT height FROM heights WHERE oid = ?", (parent_id,))
+            # we have parent?
+            parent_height = res.fetchone()
+
+            # check if previd exists, else raise NeedMoreObject
+            if parent_height is None:
+                # throw Exception because we do not have the parent
+                try:
+                    objects.verify_block(obj_dict)
+                except NeedMoreObjects as e:
+                    raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending", [parent_id, *e.missingobjids])
+                raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending", [parent_id])
+
             new_utxo, height = objects.verify_block(obj_dict)
+            if int(parent_height[0]) + 1 != height:
+                # height invalid
+                raise ErrorInvalidFormat("Block height is invalid")
+
             objects.store_block(obj_dict, new_utxo, height, cur)
+            if LONGEST_CHAIN['height'] < height:
+                LONGEST_CHAIN['blockid'] = obj_dict['objid']
+                LONGEST_CHAIN['height'] = height
             # store_block_utxo_height(obj_dict, new_utxo, height)
         else:
             raise ErrorInvalidFormat("Got an object of unknown type")  # assert: false
@@ -548,6 +576,7 @@ async def handle_object_msg(msg_dict, queue):
     except NeedMoreObjects as e:
         print(f"Need more elements: {e.message}")
         for q in CONNECTIONS.values():
+            # await q.put("".join([mk_getobject_msg(x) for x in e.missingobjids]))
             for missingobjid in e.missingobjids:
                 print(f"Requesting {missingobjid} from peer")
                 await q.put(mk_getobject_msg(missingobjid))
@@ -569,19 +598,34 @@ async def handle_object_msg(msg_dict, queue):
 
 # returns the chaintip blockid
 def get_chaintip_blockid():
-    pass  # TODO
+    return LONGEST_CHAIN['blockid']
 
 
 async def handle_getchaintip_msg(msg_dict, writer):
-    pass  # TODO
+    return write_msg(writer, mk_chaintip_msg(get_chaintip_blockid()))
 
 
 async def handle_getmempool_msg(msg_dict, writer):
     pass  # TODO
 
 
-async def handle_chaintip_msg(msg_dict):
-    pass  # TODO
+async def handle_chaintip_msg(msg_dict, writer):
+    blockid = msg_dict['blockid']
+
+    con = sqlite3.connect(const.DB_NAME)
+    try:
+        cur = con.cursor()
+        res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (blockid,))
+
+        # already have object
+        if not res.fetchone() is not None:
+            pass
+        else:
+            await write_msg(writer, mk_getobject_msg(blockid))
+    except Exception as e:
+        print(e)
+
+    pass
 
 
 async def handle_mempool_msg(msg_dict):
@@ -625,6 +669,7 @@ async def handle_connection(reader, writer):
         # Send initial messages
         await write_msg(writer, mk_hello_msg())
         await write_msg(writer, mk_getpeers_msg())
+        await write_msg(writer, mk_getchaintip_msg())
 
         # Complete handshake
         firstmsg_str = await asyncio.wait_for(reader.readline(),

@@ -566,3 +566,4 @@ def store_block(obj_dict, utxo, height, cur):
     cur.execute("INSERT INTO objects VALUES(?, ?)", (objid, obj_str))
     cur.execute("INSERT INTO utxo VALUES(?, ?)", (objid, utxo_str))
     cur.execute("INSERT INTO heights VALUES(?, ?)", (objid, height))
+
