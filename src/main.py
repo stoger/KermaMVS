@@ -548,7 +548,8 @@ async def handle_object_msg(msg_dict, queue):
                 try:
                     objects.verify_block(obj_dict)
                 except NeedMoreObjects as e:
-                    raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending", [parent_id, *e.missingobjids])
+                    raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending",
+                                          [parent_id, *e.missingobjids])
                 raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending", [parent_id])
 
             new_utxo, height = objects.verify_block(obj_dict)
@@ -560,6 +561,8 @@ async def handle_object_msg(msg_dict, queue):
             if LONGEST_CHAIN['height'] < height:
                 LONGEST_CHAIN['blockid'] = objects.get_objid(obj_dict)
                 LONGEST_CHAIN['height'] = height
+                cur.execute("INSERT INTO longestchain(blockid, height) VALUES(?, ?)", (LONGEST_CHAIN['blockid'], LONGEST_CHAIN['height']))
+                con.commit()
             # store_block_utxo_height(obj_dict, new_utxo, height)
         else:
             raise ErrorInvalidFormat("Got an object of unknown type")  # assert: false
@@ -841,13 +844,38 @@ def resupply_connections():
         t.add_done_callback(BACKGROUND_TASKS.discard)
 
 
+def get_longest_chain():
+    print("Restore LONGEST CHAIN")
+    con = sqlite3.connect(const.DB_NAME)
+    try:
+        cur = con.cursor()
+        res = cur.execute("SELECT * FROM longestchain ORDER BY id DESC LIMIT 1")
+
+        resval = res.fetchone()
+        if resval is not None:
+            print(resval)
+            print("LONGEST CHAIN restored!")
+            return {'blockid': resval[1], 'height': resval[2]}
+        else:
+            print("LONGEST CHAIN could not be restored!")
+    except Exception as e:
+        print(e)
+
+
+
 async def init():
     global BLOCK_WAIT_LOCK
     BLOCK_WAIT_LOCK = asyncio.Condition()
     global TX_WAIT_LOCK
     TX_WAIT_LOCK = asyncio.Condition()
 
+    global PEERS
     PEERS = Peers()  # this automatically loads the peers from file
+
+    global LONGEST_CHAIN
+    chain = get_longest_chain()
+    if chain is not None:
+        LONGEST_CHAIN = chain
 
     bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
@@ -878,3 +906,6 @@ if __name__ == "__main__":
         LISTEN_CFG['port'] = sys.argv[2]
 
     main()
+
+
+
