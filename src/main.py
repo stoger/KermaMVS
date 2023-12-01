@@ -621,7 +621,10 @@ async def handle_chaintip_msg(msg_dict, writer):
         if not res.fetchone() is None:
             pass
         else:
-            await write_msg(writer, mk_getobject_msg(blockid))
+            for q in CONNECTIONS.values():
+                # await q.put("".join([mk_getobject_msg(x) for x in e.missingobjids]))
+                print(f"Requesting {blockid} from peer")
+                await q.put(mk_getobject_msg(blockid))
     except Exception as e:
         print(e)
 
