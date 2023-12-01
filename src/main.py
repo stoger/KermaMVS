@@ -612,24 +612,35 @@ async def handle_getmempool_msg(msg_dict, writer):
 async def handle_chaintip_msg(msg_dict, writer):
     blockid = msg_dict['blockid']
 
+    # check if block already shows invalid PoW
+    if int(blockid, 16) >= int(const.BLOCK_TARGET, 16):
+        raise ErrorInvalidBlockPOW(
+            f"Block does not satisfy proof-of-work equation (has an objectid of {blockid})!")
+
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
+        res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (blockid,))
+
+        resval = res.fetchone()
+        if resval is not None:
+            if objects.expand_object(resval[0])['type'] != 'block':
+                raise ErrorInvalidFormat("Received Chaintip Object is not a block!")
+
         res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (blockid,))
 
         # already have object
-        if not res.fetchone() is None:
+        if res.fetchone() is not None:
             pass
         else:
             for q in CONNECTIONS.values():
-                # await q.put("".join([mk_getobject_msg(x) for x in e.missingobjids]))
                 print(f"Requesting {blockid} from peer")
                 await q.put(mk_getobject_msg(blockid))
+    except FaultyNodeException as e:
+        raise e
     except Exception as e:
         print(e)
-
     pass
-
 
 async def handle_mempool_msg(msg_dict):
     pass  # TODO

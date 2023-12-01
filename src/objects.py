@@ -407,16 +407,6 @@ def verify_block(block_dict):
     print(f"Called verify_block for block {block_dict}")
     blockid = get_objid(block_dict)
 
-    prev_utxo = None
-    prev_block = None
-    prev_height = None
-
-    previd = block_dict['previd']
-    prev_block, prev_utxo, prev_height = get_block_utxo_height(previd)
-
-    if prev_block is None:
-        raise ErrorUnknownObject("Previous block missing or invalid!")
-
     # check if we have all TXs, fetch them if necessary
     txs = get_block_txs(block_dict['txids'])
     missing_txids = set(block_dict['txids']) - set(txs.keys())
@@ -426,6 +416,16 @@ def verify_block(block_dict):
         txs = get_block_txs(block_dict['txids'])
         missing_txids = set(block_dict['txids']) - set(txs.keys())
         raise NeedMoreObjects(f"Block {blockid} requires transactions {missing_txids}", missing_txids)
+
+    prev_utxo = None
+    prev_block = None
+    prev_height = None
+
+    previd = block_dict['previd']
+    prev_block, prev_utxo, prev_height = get_block_utxo_height(previd)
+
+    if prev_block is None:
+        raise ErrorUnknownObject("Previous block missing or invalid!")
 
     new_utxo, height = verify_block_tail(block_dict, prev_block, prev_utxo, prev_height, txs)
 
