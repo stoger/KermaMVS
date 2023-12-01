@@ -576,7 +576,6 @@ async def handle_object_msg(msg_dict, queue):
     except NeedMoreObjects as e:
         print(f"Need more elements: {e.message}")
         for q in CONNECTIONS.values():
-            # await q.put("".join([mk_getobject_msg(x) for x in e.missingobjids]))
             for missingobjid in e.missingobjids:
                 print(f"Requesting {missingobjid} from peer")
                 await q.put(mk_getobject_msg(missingobjid))
@@ -601,7 +600,7 @@ def get_chaintip_blockid():
     return LONGEST_CHAIN['blockid']
 
 
-async def handle_getchaintip_msg(msg_dict, writer):
+async def handle_getchaintip_msg(writer):
     await write_msg(writer, mk_chaintip_msg(get_chaintip_blockid()))
 
 
@@ -609,7 +608,7 @@ async def handle_getmempool_msg(msg_dict, writer):
     pass  # TODO
 
 
-async def handle_chaintip_msg(msg_dict, writer):
+async def handle_chaintip_msg(msg_dict):
     blockid = msg_dict['blockid']
 
     # check if block already shows invalid PoW
@@ -641,6 +640,7 @@ async def handle_chaintip_msg(msg_dict, writer):
     except Exception as e:
         print(e)
     pass
+
 
 async def handle_mempool_msg(msg_dict):
     pass  # TODO
@@ -740,9 +740,9 @@ async def handle_connection(reader, writer):
                 elif msg_type == 'object':
                     await handle_object_msg(msg, queue)
                 elif msg_type == 'getchaintip':
-                    await handle_getchaintip_msg(msg, writer)
+                    await handle_getchaintip_msg(writer)
                 elif msg_type == 'chaintip':
-                    await handle_chaintip_msg(msg, writer)
+                    await handle_chaintip_msg(msg)
                 elif msg_type == 'getmempool':
                     await handle_getmempool_msg(msg, writer)
                 elif msg_type == 'mempool':
