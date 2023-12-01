@@ -39,7 +39,7 @@ class ErrorInvalidTxSignature(FaultyNodeException):
         self.error_name = "INVALID_TX_SIGNATURE"
         super().__init__(self.message, self.error_name)
 
-class ErrorInvalidTxConservation(FaultyNodeException):
+class  ErrorInvalidTxConservation(FaultyNodeException):
     def __init__(self, message) -> None:
         self.message = message
         self.error_name = "INVALID_TX_CONSERVATION"
@@ -51,22 +51,22 @@ class ErrorInvalidTxOutpoint(FaultyNodeException):
         self.error_name = "INVALID_TX_OUTPOINT"
         super().__init__(self.message, self.error_name)
 
+class ErrorUnknownObject(NonfaultyNodeException):
+    def __init__(self, message) -> None:
+        self.message = message
+        self.error_name = "UNKNOWN_OBJECT"
+        super().__init__(self.message, self.error_name)
+
+class ErrorInvalidBlockPow(FaultyNodeException):
+    def __init__(self, message) -> None:
+        self.message = message
+        self.error_name = "INVALID_BLOCK_POW"
+        super().__init__(self.message, self.error_name)
+
 class ErrorInvalidBlockTimestamp(FaultyNodeException):
     def __init__(self, message) -> None:
         self.message = message
         self.error_name = "INVALID_BLOCK_TIMESTAMP"
-        super().__init__(self.message, self.error_name)
-
-class ErrorInvalidGenesis(FaultyNodeException):
-    def __init__(self, message) -> None:
-        self.message = message
-        self.error_name = "INVALID_GENESIS"
-        super().__init__(self.message, self.error_name)
-
-class ErrorInvalidBlockPOW(FaultyNodeException):
-    def __init__(self, message) -> None:
-        self.message = message
-        self.error_name = "INVALID_BLOCK_POW"
         super().__init__(self.message, self.error_name)
 
 class ErrorInvalidBlockCoinbase(FaultyNodeException):
@@ -75,10 +75,10 @@ class ErrorInvalidBlockCoinbase(FaultyNodeException):
         self.error_name = "INVALID_BLOCK_COINBASE"
         super().__init__(self.message, self.error_name)
 
-class ErrorUnknownObject(NonfaultyNodeException):
+class ErrorInvalidGenesis(FaultyNodeException):
     def __init__(self, message) -> None:
         self.message = message
-        self.error_name = "UNKNOWN_OBJECT"
+        self.error_name = "INVALID_GENESIS"
         super().__init__(self.message, self.error_name)
 
 class ErrorUnfindableObject(NonfaultyNodeException):
@@ -87,9 +87,8 @@ class ErrorUnfindableObject(NonfaultyNodeException):
         self.error_name = "UNFINDABLE_OBJECT"
         super().__init__(self.message, self.error_name)
 
-class NeedMoreObjects(NonfaultyNodeException):
-    def __init__(self, message, missingobjids) -> None:
+class ErrorInvalidAncestry(FaultyNodeException):
+    def __init__(self, message) -> None:
         self.message = message
-        self.missingobjids = missingobjids
-        self.error_name = "---"
+        self.error_name = "INVALID_ANCESTRY"
         super().__init__(self.message, self.error_name)
