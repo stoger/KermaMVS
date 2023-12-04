@@ -43,11 +43,8 @@ class Validator:
                 self.new_invalid_object(key)
 
     ##whenever new object recceived handle_connection calls this --> not yet required
-    def received_object(self, objid):
-        # reset timer, should hopefully be enough to validate it
-        if objid in self.pending_objects:
-            self.pending_objects[objid]['timeout'] = time.time() + 60
-
+    # def received_object(self, objid):
+    
     # whenever a thread validated a new object
     def new_valid_object(self, objid):
         for key in self.pending_objects.copy().keys():
