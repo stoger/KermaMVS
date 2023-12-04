@@ -314,6 +314,11 @@ def verify_transaction(tx_dict, input_txs):
     if 'height' in tx_dict:
         return # assume all syntactically valid coinbase transactions are valid
 
+    # check which tx we are missing
+    missing_tx = list(map(lambda y: y['outpoint']['txid'], filter(lambda x: x['outpoint']['txid'] not in input_txs, tx_dict['inputs'])))
+    if len(missing_tx) > 0:
+        raise NeedMoreObjects("Need WAY more objects for tx-validation!", missing_tx)
+
     # regular transaction
     insum = 0 # sum of input values
     in_dict = dict()
@@ -330,7 +335,9 @@ def verify_transaction(tx_dict, input_txs):
             in_dict[ptxid] = {ptxidx}
 
         if ptxid not in input_txs:
-            raise ErrorUnknownObject(f"Transaction {ptxid} not known")
+            # raise ErrorUnknownObject(f"Transaction {ptxid} not known")
+            print("missing transaction :(")
+            raise NeedMoreObjects("Needm more objects for tx-validation!", [ptxid])
 
         ptx_dict = input_txs[ptxid]
 

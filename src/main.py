@@ -516,6 +516,7 @@ def gather_previous_txs(db_cur, tx_dict):
 async def handle_object_msg(msg_dict, queue):
     obj_dict = msg_dict['object']
     objid = objects.get_objid(obj_dict)
+    VALIDATOR.received_object(objid)
     print(f"Received object with id {objid}: {obj_dict}")
 
     err_str = None

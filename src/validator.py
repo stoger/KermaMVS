@@ -33,6 +33,7 @@ class Validator:
             o = self.pending_objects[key]
             if o['timeout'] < time.time():
                 # invalidate this
+                print(f"failed to find object '{key}' in 5s :(")
                 o['queue'].put_nowait({
                     'type': 'error',
                     'name': 'UNFINDABLE_OBJECT',
@@ -42,7 +43,10 @@ class Validator:
                 self.new_invalid_object(key)
 
     ##whenever new object recceived handle_connection calls this --> not yet required
-    # def received_object(self, objid):
+    def received_object(self, objid):
+        # reset timer, should hopefully be enough to validate it
+        if objid in self.pending_objects:
+            self.pending_objects[objid]['timeout'] = time.time() + 60
 
     # whenever a thread validated a new object
     def new_valid_object(self, objid):
@@ -62,6 +66,8 @@ class Validator:
                         })
                     except Exception:
                         pass
+                else:
+                    print(f"cannot resume validation for '{objid}', missing: '{unknown_objects}")
 
     def new_invalid_object(self, objid):
         for key in self.pending_objects.copy().keys():
