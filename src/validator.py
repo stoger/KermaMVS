@@ -74,9 +74,10 @@ class Validator:
                 # this object is invalid
                 # send this into the thread queue
                 try:
-                    o['thread'].put_nowait({
+                    o['queue'].put_nowait({
                         'msg': f"Object {key} depends on invalid object {objid}",
-                        'name': "INVALID_ANCESTRY"
+                        'name': "INVALID_ANCESTRY",
+                        'type': 'error'
                     })
                     # TODO: propagate this errror
                     self.pending_objects.pop(key)

@@ -384,8 +384,10 @@ def validate_object_msg(msg_dict):
         validate_allowed_keys(msg_dict, ['type', 'object'], 'object')
 
     except FaultyNodeException as e:
+        VALIDATOR.new_invalid_object(objects.get_objid(obj))
         raise e
     except NonfaultyNodeException as e:
+        VALIDATOR.new_invalid_object(objects.get_objid(obj))
         raise e
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
@@ -589,6 +591,7 @@ async def handle_object_msg(msg_dict, queue):
     except NodeException as e:  # whatever the reason, just reject this
         con.rollback()
         print("Failed to verify object '{}': {}".format(objid, str(e)))
+        VALIDATOR.new_invalid_object(objid)
         raise e  # and re-raise this
     except Exception as e:
         print(f"An exception occured: {str(e)}")
@@ -656,6 +659,11 @@ async def handle_queue_msg(msg_dict, writer):
     if msg_dict['type'] == 'resumeValidation':
         await handle_object_msg(msg_dict, None)
     else:
+        if "name" in msg_dict:
+            if msg_dict["name"] == "INVALID_ANCESTRY":
+                raise ErrorInvalidAncestry(msg_dict["msg"])
+            if msg_dict["name"] == "UNFINDABLE_OBJECT":
+                raise ErrorUnfindableObject(msg_dict["msg"])
         await write_msg(writer, msg_dict)
 
 
@@ -715,7 +723,13 @@ async def handle_connection(reader, writer):
             if queue_task in done:
                 queue_msg = queue_task.result()
                 queue_task = None
-                await handle_queue_msg(queue_msg, writer)
+                try:
+                    await handle_queue_msg(queue_msg, writer)
+                except NonfaultyNodeException as e:
+                    print("{}: A (nonfaulty) error occured: {}: {}".format(peer, e.error_name, e.message))
+                    await write_msg(writer, mk_error_msg(e.message, e.error_name))
+
+
                 queue.task_done()
 
             # if no message was received over the network continue
