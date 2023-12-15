@@ -534,6 +534,7 @@ async def handle_object_msg(msg_dict, queue):
             if height > CHAINTIP_HEIGHT:
                 CHAINTIP_HEIGHT = height
                 CHAINTIP = objid
+                MEMPOOL.rebase_to_block(objid)
         else:
             raise ErrorInvalidFormat("Got an object of unknown type") # assert: false
         # if everything worked, commit this
@@ -544,7 +545,6 @@ async def handle_object_msg(msg_dict, queue):
 
         # gossip the new object to all connections
         await broadcast_msg(mk_ihaveobject_msg(objid))
-
     except NeedMoreObjects as e:
         print(f"Need more elements: {e.message}")
         print("Adding this to the validator as a pending task")
