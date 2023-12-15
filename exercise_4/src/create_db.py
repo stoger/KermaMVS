@@ -15,6 +15,7 @@ def createDB():
         cur.execute("CREATE TABLE IF NOT EXISTS objects(oid VARCHAR(64) PRIMARY KEY, obj TEXT NOT NULL)")
         cur.execute("CREATE TABLE IF NOT EXISTS utxo(blockid VARCHAR(64) PRIMARY KEY, utxoset TEXT NOT NULL, FOREIGN KEY(blockid) REFERENCES objects(oid))")
         cur.execute("CREATE TABLE IF NOT EXISTS heights(blockid VARCHAR(64) PRIMARY KEY, height INT NOT NULL, FOREIGN KEY(blockid) REFERENCES objects(oid))")
+        cur.execute("CREATE TABLE IF NOT EXISTS longestchain(id INT SERIAL PRIMARY KEY, blockid VARCHAR(64), height INT NOT NULL)")
 
         # Preload genesis block
         res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (const.GENESIS_BLOCK_ID,))

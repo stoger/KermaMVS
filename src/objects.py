@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import re
+import time
 
 import constants as const
 
@@ -227,6 +228,8 @@ def validate_block(block_dict):
         raise ErrorInvalidFormat("Block object invalid: created timestamp smaller than zero")
     try:
         datetime.utcfromtimestamp(ts)
+        if ts > time.time():
+            raise ErrorInvalidBlockTimestamp("Block object invalid: created timestamp greater than current time")
     except Exception:
         raise ErrorInvalidBlockTimestamp("Block object invalid: created timestamp could not be parsed!")
 
@@ -314,10 +317,18 @@ def verify_transaction(tx_dict, input_txs):
     if 'height' in tx_dict:
         return # assume all syntactically valid coinbase transactions are valid
 
-    # check which tx we are missing
-    missing_tx = list(map(lambda y: y['outpoint']['txid'], filter(lambda x: x['outpoint']['txid'] not in input_txs, tx_dict['inputs'])))
-    if len(missing_tx) > 0:
-        raise NeedMoreObjects("Need WAY more objects for tx-validation!", missing_tx)
+    tx_id = get_objid(tx_dict)
+
+    missing_objects = []
+
+    for i in tx_dict['inputs']:
+        ptxid = i['outpoint']['txid']
+
+        if ptxid not in input_txs:
+            missing_objects.append(ptxid)
+
+    if len(missing_objects) > 0:
+        raise NeedMoreObjects(f"Transaction {tx_id} needs more objects {missing_objects}", missing_objects)
 
     # regular transaction
     insum = 0 # sum of input values
@@ -333,11 +344,6 @@ def verify_transaction(tx_dict, input_txs):
                 in_dict[ptxid].add(ptxidx)
         else:
             in_dict[ptxid] = {ptxidx}
-
-        if ptxid not in input_txs:
-            # raise ErrorUnknownObject(f"Transaction {ptxid} not known")
-            print("missing transaction :(")
-            raise NeedMoreObjects("Needm more objects for tx-validation!", [ptxid])
 
         ptx_dict = input_txs[ptxid]
 
@@ -414,16 +420,6 @@ def verify_block(block_dict):
     print(f"Called verify_block for block {block_dict}")
     blockid = get_objid(block_dict)
 
-    # check if we have all TXs, fetch them if necessary
-    txs = get_block_txs(block_dict['txids'])
-    missing_txids = set(block_dict['txids']) - set(txs.keys())
-
-    print(f'Set of missing transactions: {missing_txids}')
-    if len(missing_txids) > 0:
-        txs = get_block_txs(block_dict['txids'])
-        missing_txids = set(block_dict['txids']) - set(txs.keys())
-        raise NeedMoreObjects(f"Block {blockid} requires transactions {missing_txids}", missing_txids)
-
     prev_utxo = None
     prev_block = None
     prev_height = None
@@ -431,8 +427,18 @@ def verify_block(block_dict):
     previd = block_dict['previd']
     prev_block, prev_utxo, prev_height = get_block_utxo_height(previd)
 
+    missing_objects = []
+    
+    # check if we have all TXs, fetch them if necessary
+    txs = get_block_txs(block_dict['txids'])
+    missing_objects = set(block_dict['txids']) - set(txs.keys())
+
     if prev_block is None:
-        raise ErrorUnknownObject("Previous block missing or invalid!")
+        missing_objects.add(previd)
+
+    print(f'Set of missing objects: {missing_objects}')
+    if len(missing_objects) > 0:
+        raise NeedMoreObjects(f"Block {blockid} requires objects {missing_objects}", missing_objects)
 
     new_utxo, height = verify_block_tail(block_dict, prev_block, prev_utxo, prev_height, txs)
 
@@ -574,3 +580,16 @@ def store_block(obj_dict, utxo, height, cur):
     cur.execute("INSERT INTO utxo VALUES(?, ?)", (objid, utxo_str))
     cur.execute("INSERT INTO heights VALUES(?, ?)", (objid, height))
 
+def get_object(objid):
+    con = sqlite3.connect(const.DB_NAME)
+    try:
+        cur = con.cursor()
+
+        res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (objid,))
+        row = res.fetchone()
+        if row is not None:
+            return expand_object(row[0])
+        else:
+            return None
+    finally:
+        con.close()

@@ -29,11 +29,11 @@ BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
 MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
 LISTEN_CFG = {
-    "address": const.ADDRESS,
-    "port": const.PORT
+        "address": const.ADDRESS,
+        "port": const.PORT
 }
-LONGEST_CHAIN = {"blockid": const.GENESIS_BLOCK_ID, "height": 0}
-
+CHAINTIP = const.GENESIS_BLOCK_ID
+CHAINTIP_HEIGHT = 0
 
 # Add peer to your list of peers
 def add_peer(peer):
@@ -63,7 +63,6 @@ def add_connection(peer, queue):
 
     CONNECTIONS[p] = queue
 
-
 # Delete connection
 def del_connection(peer):
     ip, port = peer
@@ -72,19 +71,19 @@ def del_connection(peer):
     PEERS.removePeer(p)
     PEERS.save()
 
+async def broadcast_msg(msg):
+    for k, q in CONNECTIONS.items():
+        await q.put(msg)
 
 # Make msg objects
 def mk_error_msg(error_str, error_name):
     return {"type": "error", "name": error_name, "msg": error_str}
 
-
 def mk_hello_msg():
     return {"type": "hello", "version": const.VERSION, "agent": const.AGENT}
 
-
 def mk_getpeers_msg():
     return {"type": "getpeers"}
-
 
 def mk_peers_msg():
     pl = [f'{peer}' for peer in PEERS.getPeers()]
@@ -92,34 +91,26 @@ def mk_peers_msg():
         pl = random.sample(pl, 30)
     return {"type": "peers", "peers": pl}
 
-
 def mk_getobject_msg(objid):
-    return {"type": "getobject", "objectid": objid}
-
+    return {"type":"getobject", "objectid":objid}
 
 def mk_object_msg(obj_dict):
-    return {"type": "object", "object": obj_dict}
-
+    return {"type":"object", "object":obj_dict}
 
 def mk_ihaveobject_msg(objid):
-    return {"type": "ihaveobject", "objectid": objid}
-
+    return {"type":"ihaveobject", "objectid":objid}
 
 def mk_chaintip_msg(blockid):
-    return {"type": "chaintip", "blockid": blockid}
-
+    return {"type": "chaintip", "blockid": CHAINTIP}
 
 def mk_mempool_msg(txids):
-    pass  # TODO
-
+    pass # TODO
 
 def mk_getchaintip_msg():
     return {"type": "getchaintip"}
 
-
 def mk_getmempool_msg():
-    pass  # TODO
-
+    pass # TODO
 
 # parses a message as json. returns decoded message
 def parse_msg(msg_str):
@@ -137,14 +128,12 @@ def parse_msg(msg_str):
 
     return msg
 
-
 # Send data over the network as a message
 async def write_msg(writer, msg_dict):
     msg_bytes = canonicalize(msg_dict)
     writer.write(msg_bytes)
     writer.write(b'\n')
     await writer.drain()
-
 
 # Check if message contains no invalid keys,
 # raises an ErrorInvalidFormat
@@ -190,31 +179,29 @@ def validate_hello_msg(msg_dict):
 def validate_hostname(host_str):
     if not re.compile('[a-zA-Z\d\.\-\_]{3,50}').fullmatch(host_str):
         return False
-        # raise ErrorInvalidFormat(f"Peer '{host_str}' not valid: Does not match regex")
-
+        #raise ErrorInvalidFormat(f"Peer '{host_str}' not valid: Does not match regex")
+    
     if not re.compile('.*[a-zA-Z].*').fullmatch(host_str):
         return False
-        # raise ErrorInvalidFormat(f"Peer '{host_str}' not valid: Does not contain a letter")
+        #raise ErrorInvalidFormat(f"Peer '{host_str}' not valid: Does not contain a letter")
 
     if not '.' in host_str[1:-1]:
         return False
         # raise ErrorInvalidFormat(f"Peer '{host_str}' not valid: Does not contain a dot")
-
+    
     return True
-
 
 # returns true iff host_str is a valid ipv4 address
 def validate_ipv4addr(host_str):
     if not re.compile('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').fullmatch(host_str):
         return False
-
+    
     try:
         ip = ipaddress.IPv4Address(host_str)
     except:
         return False
 
     return True
-
 
 # returns true iff peer_str is a valid peer address
 def validate_peer_str(peer_str):
@@ -233,7 +220,7 @@ def validate_peer_str(peer_str):
 
     if port <= 0:
         raise ErrorInvalidFormat("Port too small")
-
+    
     if port > 65535:
         raise ErrorInvalidFormat("Port too high")
 
@@ -241,7 +228,6 @@ def validate_peer_str(peer_str):
         raise ErrorInvalidFormat("Given peer address is neither a hostname nor an ipv4 address")
 
     return True
-
 
 # raise an exception if not valid
 def validate_peers_msg(msg_dict):
@@ -271,7 +257,6 @@ def validate_peers_msg(msg_dict):
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
 
-
 # raise an exception if not valid
 def validate_getpeers_msg(msg_dict):
     if msg_dict['type'] != 'getpeers':
@@ -279,24 +264,19 @@ def validate_getpeers_msg(msg_dict):
 
     validate_allowed_keys(msg_dict, ['type'], 'getpeers')
 
-
 # raise an exception if not valid
 def validate_getchaintip_msg(msg_dict):
-    if msg_dict['type'] != 'getchaintip':
-        raise ErrorInvalidFormat("Message type is not 'getchaintip'!")
-
-    validate_allowed_keys(msg_dict, ['type'], 'getchaintip')
-
+    if len(msg_dict) != 1:
+        raise ErrorInvalidFormat("Invalid getchaintip message")
 
 # raise an exception if not valid
 def validate_getmempool_msg(msg_dict):
-    pass  # TODO
-
+    pass # TODO
 
 # raise an exception if not valid
 def validate_error_msg(msg_dict):
     if msg_dict['type'] != 'error':
-        raise ErrorInvalidFormat("Message type is not 'error'!")  # assert: false
+        raise ErrorInvalidFormat("Message type is not 'error'!") # assert: false
 
     try:
         if 'msg' not in msg_dict:
@@ -320,11 +300,10 @@ def validate_error_msg(msg_dict):
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
 
-
 # raise an exception if not valid
 def validate_ihaveobject_msg(msg_dict):
     if msg_dict['type'] != 'ihaveobject':
-        raise ErrorInvalidFormat("Message type is not 'ihaveobject'!")  # assert: false
+        raise ErrorInvalidFormat("Message type is not 'ihaveobject'!") # assert: false
 
     try:
         if 'objectid' not in msg_dict:
@@ -337,18 +316,17 @@ def validate_ihaveobject_msg(msg_dict):
         if not objects.validate_objectid(objectid):
             raise ErrorInvalidFormat("Message malformed: objectid invalid!")
 
-        validate_allowed_keys(msg_dict, ['type', 'objectid'], 'ihaveobject')
+        validate_allowed_keys(msg_dict, ['type','objectid'], 'ihaveobject')
 
     except ErrorInvalidFormat as e:
         raise e
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
-
 
 # raise an exception if not valid
 def validate_getobject_msg(msg_dict):
     if msg_dict['type'] != 'getobject':
-        raise ErrorInvalidFormat("Message type is not 'getobject'!")  # assert: false
+        raise ErrorInvalidFormat("Message type is not 'getobject'!") # assert: false
 
     try:
         if 'objectid' not in msg_dict:
@@ -361,50 +339,53 @@ def validate_getobject_msg(msg_dict):
         if not objects.validate_objectid(objectid):
             raise ErrorInvalidFormat("Message malformed: objectid invalid!")
 
-        validate_allowed_keys(msg_dict, ['type', 'objectid'], 'getobject')
+        validate_allowed_keys(msg_dict, ['type','objectid'], 'getobject')
 
     except ErrorInvalidFormat as e:
         raise e
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
 
-
 # raise an exception if not valid
 def validate_object_msg(msg_dict):
     if msg_dict['type'] != 'object':
-        raise ErrorInvalidFormat("Message type is not 'object'!")  # assert: false
+        raise ErrorInvalidFormat("Message type is not 'object'!") # assert: false
 
     try:
         if 'object' not in msg_dict:
             raise ErrorInvalidFormat("Message malformed: object is missing!")
 
+        validate_allowed_keys(msg_dict, ['type','object'], 'object')
+
         obj = msg_dict['object']
         objects.validate_object(obj)
 
-        validate_allowed_keys(msg_dict, ['type', 'object'], 'object')
-
     except FaultyNodeException as e:
-        VALIDATOR.new_invalid_object(objects.get_objid(obj))
         raise e
     except NonfaultyNodeException as e:
-        VALIDATOR.new_invalid_object(objects.get_objid(obj))
         raise e
     except Exception as e:
         raise ErrorInvalidFormat("Message malformed: {}".format(str(e)))
 
-
 # raise an exception if not valid
 def validate_chaintip_msg(msg_dict):
-    if msg_dict['type'] != 'chaintip':
-        raise ErrorInvalidFormat("Message type is not 'chaintip'!")
-    validate_allowed_keys(msg_dict, ['type', 'blockid'], 'chaintip')
+    if len(msg_dict) != 2:
+        raise ErrorInvalidFormat("More than two keys set")
+    if not "blockid" in msg_dict:
+        raise ErrorInvalidFormat("blockid not set")
+    if not isinstance(msg_dict["blockid"], str):
+        raise ErrorInvalidFormat("blockid not a string")
+    if not objects.validate_objectid(msg_dict["blockid"]):
+        raise ErrorInvalidFormat(f"Invalid format of blockid")
 
+    if int(msg_dict["blockid"], 16) >= int(const.BLOCK_TARGET, 16):
+        raise ErrorInvalidBlockPOW(f"Proposed chaintip does not satisfy proof-of-work equation (has an objectid of {msg_dict['blockid']})!")
 
+    
 # raise an exception if not valid
 def validate_mempool_msg(msg_dict):
-    pass  # todo
-
-
+    pass # todo
+        
 def validate_msg(msg_dict):
     msg_type = msg_dict['type']
     if msg_type == 'hello':
@@ -479,14 +460,15 @@ async def handle_getobject_msg(msg_dict, writer):
         obj_tuple = res.fetchone()
         # don't have object
         if obj_tuple is None:
+            await write_msg(writer, mk_error_msg(f"Object {objid} not known", "UNKNOWN_OBJECT"))
             return
+            
     finally:
         con.close()
 
     obj_dict = objects.expand_object(obj_tuple[0])
 
     await write_msg(writer, mk_object_msg(obj_dict))
-
 
 # return a list of transactions that tx_dict references
 def gather_previous_txs(db_cur, tx_dict):
@@ -513,9 +495,10 @@ def gather_previous_txs(db_cur, tx_dict):
 
     return prev_txs
 
-
 # what to do when an object message arrives
 async def handle_object_msg(msg_dict, queue):
+    global CHAINTIP
+    global CHAINTIP_HEIGHT
     obj_dict = msg_dict['object']
     objid = objects.get_objid(obj_dict)
     print(f"Received object with id {objid}: {obj_dict}")
@@ -532,42 +515,25 @@ async def handle_object_msg(msg_dict, queue):
             return
 
         print("Received new object '{}'".format(objid))
+        # notify validator that we received this object here
+        VALIDATOR.received_object(objid)
+        if VALIDATOR.is_pending(objid):
+            VALIDATOR.add_peer(objid, queue)
+            return # no need to rerun verification that is pending yet
 
         if obj_dict['type'] == 'transaction':
             prev_txs = gather_previous_txs(cur, obj_dict)
             objects.verify_transaction(obj_dict, prev_txs)
             objects.store_transaction(obj_dict, cur)
         elif obj_dict['type'] == 'block':
-            # check if parent block height is height of object plus 1
-            parent_id = obj_dict['previd']
-            res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (parent_id,))
-            # we have parent?
-            parent_height = res.fetchone()
-
-            # check if previd exists, else raise NeedMoreObject
-            if parent_height is None:
-                # throw Exception because we do not have the parent
-                try:
-                    objects.verify_block(obj_dict)
-                except NeedMoreObjects as e:
-                    raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending",
-                                          [parent_id, *e.missingobjids])
-                raise NeedMoreObjects(f"Parent block {parent_id} missing, validation pending", [parent_id])
-
             new_utxo, height = objects.verify_block(obj_dict)
-            if int(parent_height[0]) + 1 != height:
-                # height invalid
-                raise ErrorInvalidFormat("Block height is invalid")
-
             objects.store_block(obj_dict, new_utxo, height, cur)
-            if LONGEST_CHAIN['height'] < height:
-                LONGEST_CHAIN['blockid'] = objects.get_objid(obj_dict)
-                LONGEST_CHAIN['height'] = height
-                cur.execute("INSERT INTO longestchain(blockid, height) VALUES(?, ?)", (LONGEST_CHAIN['blockid'], LONGEST_CHAIN['height']))
-                con.commit()
-            # store_block_utxo_height(obj_dict, new_utxo, height)
+
+            if height > CHAINTIP_HEIGHT:
+                CHAINTIP_HEIGHT = height
+                CHAINTIP = objid
         else:
-            raise ErrorInvalidFormat("Got an object of unknown type")  # assert: false
+            raise ErrorInvalidFormat("Got an object of unknown type") # assert: false
         # if everything worked, commit this
         con.commit()
 
@@ -575,24 +541,22 @@ async def handle_object_msg(msg_dict, queue):
         VALIDATOR.new_valid_object(objid)
 
         # gossip the new object to all connections
-        for k, q in CONNECTIONS.items():
-            await q.put(mk_ihaveobject_msg(objid))
+        await broadcast_msg(mk_ihaveobject_msg(objid))
 
     except NeedMoreObjects as e:
         print(f"Need more elements: {e.message}")
+        print("Adding this to the validator as a pending task")
+        VALIDATOR.verification_pending(obj_dict, queue, e.missingobjids)
         for q in CONNECTIONS.values():
             for missingobjid in e.missingobjids:
                 print(f"Requesting {missingobjid} from peer")
                 await q.put(mk_getobject_msg(missingobjid))
-        print("Adding this to the validator as a pending task")
-        VALIDATOR.verification_pending(obj_dict, queue, e.missingobjids)
         print("Returning")
-        return  # and consume exception
-    except NodeException as e:  # whatever the reason, just reject this
+        return # and consume exception
+    except NodeException as e: # whatever the reason, just reject this
         con.rollback()
         print("Failed to verify object '{}': {}".format(objid, str(e)))
-        VALIDATOR.new_invalid_object(objid)
-        raise e  # and re-raise this
+        raise e # and re-raise this
     except Exception as e:
         print(f"An exception occured: {str(e)}")
         con.rollback()
@@ -601,71 +565,55 @@ async def handle_object_msg(msg_dict, queue):
         con.close()
 
 
-# returns the chaintip blockid
+# returns the chaintip blockid + height
 def get_chaintip_blockid():
-    return LONGEST_CHAIN['blockid']
-
-
-async def handle_getchaintip_msg(writer):
-    await write_msg(writer, mk_chaintip_msg(get_chaintip_blockid()))
-
-
-async def handle_getmempool_msg(msg_dict, writer):
-    pass  # TODO
-
-
-async def handle_chaintip_msg(msg_dict):
-    blockid = msg_dict['blockid']
-
-    # check if block already shows invalid PoW
-    if int(blockid, 16) >= int(const.BLOCK_TARGET, 16):
-        raise ErrorInvalidBlockPOW(
-            f"Block does not satisfy proof-of-work equation (has an objectid of {blockid})!")
-
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
-        res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (blockid,))
 
-        resval = res.fetchone()
-        if resval is not None:
-            if objects.expand_object(resval[0])['type'] != 'block':
-                raise ErrorInvalidFormat("Received Chaintip Object is not a block!")
+        res = cur.execute("SELECT blockid, height FROM heights ORDER BY height DESC LIMIT 1")
+        row = res.fetchone()
+        if row is None:
+            raise Exception("Assertion error: Not even the genesis block in database")
 
-        res = cur.execute("SELECT height FROM heights WHERE blockid = ?", (blockid,))
-
-        # already have object
-        if res.fetchone() is not None:
-            pass
-        else:
-            for q in CONNECTIONS.values():
-                print(f"Requesting {blockid} from peer")
-                await q.put(mk_getobject_msg(blockid))
-    except FaultyNodeException as e:
-        raise e
+        return (row[0], row[1])
     except Exception as e:
-        print(e)
-    pass
+        # assert: false
+        con.rollback()
+        raise e
+    finally:
+        con.close()
 
+
+async def handle_getchaintip_msg(msg_dict, writer):
+    await write_msg(writer, mk_chaintip_msg(CHAINTIP))
+
+
+async def handle_getmempool_msg(msg_dict, writer):
+    pass # TODO
+
+
+async def handle_chaintip_msg(msg_dict):
+    objectid = msg_dict['blockid']
+
+    obj = objects.get_object(objectid)
+    if obj == None:
+        await broadcast_msg(mk_getobject_msg(objectid))
+    else:
+        if obj['type'] != 'block':
+            raise ErrorInvalidFormat(f"Proposed chaintip {objectid} is not a block")
 
 async def handle_mempool_msg(msg_dict):
-    pass  # TODO
-
+    pass # TODO
 
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
-    # check if this is a special message
-    # currently there are only type:'resumeValidation'
+    #check if this is a special message
+    #currently there are only type:'resumeValidation'
     if msg_dict['type'] == 'resumeValidation':
         await handle_object_msg(msg_dict, None)
     else:
-        if "name" in msg_dict:
-            if msg_dict["name"] == "INVALID_ANCESTRY":
-                raise ErrorInvalidAncestry(msg_dict["msg"])
-            if msg_dict["name"] == "UNFINDABLE_OBJECT":
-                raise ErrorUnfindableObject(msg_dict["msg"])
         await write_msg(writer, msg_dict)
-
 
 # how to handle a connection
 async def handle_connection(reader, writer):
@@ -678,7 +626,7 @@ async def handle_connection(reader, writer):
         peer = writer.get_extra_info('peername')
         if not peer:
             raise Exception("Failed to get peername!")
-
+        
         add_connection(peer, queue)
 
         print("New connection with {}".format(peer))
@@ -695,10 +643,10 @@ async def handle_connection(reader, writer):
         await write_msg(writer, mk_hello_msg())
         await write_msg(writer, mk_getpeers_msg())
         await write_msg(writer, mk_getchaintip_msg())
-
+        
         # Complete handshake
         firstmsg_str = await asyncio.wait_for(reader.readline(),
-                                              timeout=const.HELLO_MSG_TIMEOUT)
+                timeout=const.HELLO_MSG_TIMEOUT)
         firstmsg = parse_msg(firstmsg_str)
         validate_hello_msg(firstmsg)
 
@@ -711,7 +659,7 @@ async def handle_connection(reader, writer):
 
             # wait for network or queue messages
             done, pending = await asyncio.wait([read_task, queue_task],
-                                               return_when=asyncio.FIRST_COMPLETED)
+                    return_when = asyncio.FIRST_COMPLETED)
             if read_task in done:
                 msg_str = read_task.result()
                 if not msg_str:
@@ -723,13 +671,7 @@ async def handle_connection(reader, writer):
             if queue_task in done:
                 queue_msg = queue_task.result()
                 queue_task = None
-                try:
-                    await handle_queue_msg(queue_msg, writer)
-                except NonfaultyNodeException as e:
-                    print("{}: A (nonfaulty) error occured: {}: {}".format(peer, e.error_name, e.message))
-                    await write_msg(writer, mk_error_msg(e.message, e.error_name))
-
-
+                await handle_queue_msg(queue_msg, writer)
                 queue.task_done()
 
             # if no message was received over the network continue
@@ -757,7 +699,7 @@ async def handle_connection(reader, writer):
                 elif msg_type == 'object':
                     await handle_object_msg(msg, queue)
                 elif msg_type == 'getchaintip':
-                    await handle_getchaintip_msg(writer)
+                    await handle_getchaintip_msg(msg, writer)
                 elif msg_type == 'chaintip':
                     await handle_chaintip_msg(msg)
                 elif msg_type == 'getmempool':
@@ -765,7 +707,7 @@ async def handle_connection(reader, writer):
                 elif msg_type == 'mempool':
                     await handle_mempool_msg(msg)
                 else:
-                    pass  # assert: false
+                    pass # assert: false
             except NonfaultyNodeException as e:
                 print("{}: A (nonfaulty) error occured: {}: {}".format(peer, e.error_name, e.message))
                 await write_msg(writer, mk_error_msg(e.message, e.error_name))
@@ -800,7 +742,7 @@ async def handle_connection(reader, writer):
 async def connect_to_node(peer: Peer):
     try:
         reader, writer = await asyncio.open_connection(peer.host, peer.port,
-                                                       limit=const.RECV_BUFFER_LIMIT)
+                limit=const.RECV_BUFFER_LIMIT)
     except Exception as e:
         print(f"failed to connect to peer {peer.host}:{peer.port}: {str(e)}")
 
@@ -815,13 +757,12 @@ async def connect_to_node(peer: Peer):
 
 async def listen():
     server = await asyncio.start_server(handle_connection, LISTEN_CFG['address'],
-                                        LISTEN_CFG['port'], limit=const.RECV_BUFFER_LIMIT)
+            LISTEN_CFG['port'], limit=const.RECV_BUFFER_LIMIT)
 
     print("Listening on {}:{}".format(LISTEN_CFG['address'], LISTEN_CFG['port']))
 
     async with server:
         await server.serve_forever()
-
 
 # bootstrap peers. connect to hardcoded peers
 async def bootstrap():
@@ -830,7 +771,6 @@ async def bootstrap():
         t = asyncio.create_task(connect_to_node(p))
         BACKGROUND_TASKS.add(t)
         t.add_done_callback(BACKGROUND_TASKS.discard)
-
 
 # connect to some peers
 def resupply_connections():
@@ -858,38 +798,13 @@ def resupply_connections():
         t.add_done_callback(BACKGROUND_TASKS.discard)
 
 
-def get_longest_chain():
-    print("Restore LONGEST CHAIN")
-    con = sqlite3.connect(const.DB_NAME)
-    try:
-        cur = con.cursor()
-        res = cur.execute("SELECT * FROM longestchain ORDER BY id DESC LIMIT 1")
-
-        resval = res.fetchone()
-        if resval is not None:
-            print(resval)
-            print("LONGEST CHAIN restored!")
-            return {'blockid': resval[1], 'height': resval[2]}
-        else:
-            print("LONGEST CHAIN could not be restored!")
-    except Exception as e:
-        print(e)
-
-
-
 async def init():
     global BLOCK_WAIT_LOCK
     BLOCK_WAIT_LOCK = asyncio.Condition()
     global TX_WAIT_LOCK
     TX_WAIT_LOCK = asyncio.Condition()
 
-    global PEERS
-    PEERS = Peers()  # this automatically loads the peers from file
-
-    global LONGEST_CHAIN
-    chain = get_longest_chain()
-    if chain is not None:
-        LONGEST_CHAIN = chain
+    PEERS = Peers() # this automatically loads the peers from file
 
     bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
@@ -911,6 +826,7 @@ async def init():
 def main():
     # create the database if it does not yet exist
     create_db.createDB()
+    CHAINTIP, CHAINTIP_HEIGHT = get_chaintip_blockid()
     asyncio.run(init())
 
 
@@ -920,6 +836,3 @@ if __name__ == "__main__":
         LISTEN_CFG['port'] = sys.argv[2]
 
     main()
-
-
-
