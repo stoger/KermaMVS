@@ -27,7 +27,7 @@ BACKGROUND_TASKS = set()
 BLOCK_VERIFY_TASKS = dict()
 BLOCK_WAIT_LOCK = None
 TX_WAIT_LOCK = None
-MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, {})
+MEMPOOL = mempool.Mempool(const.GENESIS_BLOCK_ID, set())
 LISTEN_CFG = {
         "address": const.ADDRESS,
         "port": const.PORT
@@ -104,13 +104,13 @@ def mk_chaintip_msg(blockid):
     return {"type": "chaintip", "blockid": CHAINTIP}
 
 def mk_mempool_msg(txids):
-    pass # TODO
+    return {"type": "mempool", "txids": txids}
 
 def mk_getchaintip_msg():
     return {"type": "getchaintip"}
 
 def mk_getmempool_msg():
-    pass # TODO
+    return {"type": "getmempool"}
 
 # parses a message as json. returns decoded message
 def parse_msg(msg_str):
@@ -271,7 +271,8 @@ def validate_getchaintip_msg(msg_dict):
 
 # raise an exception if not valid
 def validate_getmempool_msg(msg_dict):
-    pass # TODO
+    if len(msg_dict) != 1:
+        raise ErrorInvalidFormat("Invalid getmempool message")
 
 # raise an exception if not valid
 def validate_error_msg(msg_dict):
@@ -525,6 +526,7 @@ async def handle_object_msg(msg_dict, queue):
             prev_txs = gather_previous_txs(cur, obj_dict)
             objects.verify_transaction(obj_dict, prev_txs)
             objects.store_transaction(obj_dict, cur)
+            MEMPOOL.try_add_tx(obj_dict)
         elif obj_dict['type'] == 'block':
             new_utxo, height = objects.verify_block(obj_dict)
             objects.store_block(obj_dict, new_utxo, height, cur)
@@ -590,21 +592,27 @@ async def handle_getchaintip_msg(msg_dict, writer):
 
 
 async def handle_getmempool_msg(msg_dict, writer):
-    pass # TODO
+    await write_msg(writer, mk_mempool_msg(MEMPOOL.txs))
 
 
 async def handle_chaintip_msg(msg_dict):
     objectid = msg_dict['blockid']
 
     obj = objects.get_object(objectid)
-    if obj == None:
+    if obj is None:
         await broadcast_msg(mk_getobject_msg(objectid))
     else:
         if obj['type'] != 'block':
             raise ErrorInvalidFormat(f"Proposed chaintip {objectid} is not a block")
 
 async def handle_mempool_msg(msg_dict):
-    pass # TODO
+    for txid in msg_dict['txids']:
+        obj = objects.get_object(txid)
+        if obj is None:
+            await broadcast_msg(mk_getobject_msg(txid))
+        else:
+            MEMPOOL.try_add_tx(txid)
+
 
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
@@ -643,6 +651,7 @@ async def handle_connection(reader, writer):
         await write_msg(writer, mk_hello_msg())
         await write_msg(writer, mk_getpeers_msg())
         await write_msg(writer, mk_getchaintip_msg())
+        await write_msg(writer, mk_getmempool_msg())
         
         # Complete handshake
         firstmsg_str = await asyncio.wait_for(reader.readline(),

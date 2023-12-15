@@ -32,13 +32,36 @@ def rebase_mempool(old_tip, new_tip, mptxids):
     pass # TODO
 
 class Mempool:
-    def __init__(self, bbid: str, butxo: dict):
+    def __init__(self, bbid: str, butxo: set):
         self.base_block_id = bbid
         self.utxo = butxo
         self.txs = []
 
     def try_add_tx(self, tx: dict) -> bool:
-        pass # TODO
+        if tx["inputs"] == []:
+            return False
+# This is possible if Tx spends only from unspent outputs that are also not spent by any transaction currently in the mempool.
+
+        for item in tx["inputs"]:
+            spending_tx = item["outpoint"]["txid"]
+            if spending_tx not in self.utxo:
+                return False  # already spent or something
+
+            self.utxo.remove(spending_tx)
+            self.txs.append(spending_tx)
+        return True  # TODO
 
     def rebase_to_block(self, bid: str):
-        pass # TODO
+        self.base_block_id = bid
+        (_, utxo, _) = objects.get_block_utxo_height(bid)
+        self.utxo = utxo
+        tx_to_reapply = self.txs
+        self.txs = []
+
+        for item in tx_to_reapply:
+            self.try_add_tx(item)
+        pass  # TODO
+
+    def printMempool(self): #debuuggg
+        print(self.txs)
+        print(self.utxo)
