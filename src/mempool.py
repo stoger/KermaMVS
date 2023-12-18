@@ -103,7 +103,7 @@ class Mempool:
         reapply_tx = get_all_txids_in_blocks(old_blocks)
         for tx in reapply_tx:
             self.try_add_tx(tx)
-
+        self.base_block_id = bid
 
         # OLD
 
