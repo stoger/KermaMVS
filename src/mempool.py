@@ -44,12 +44,12 @@ def get_all_blocks_from_chain(chaintip, end_block):
 def get_common_ancestor(old_chaintip, new_chaintip):
     old_blocks = get_all_blocks_from_chain(old_chaintip, const.GENESIS_BLOCK_ID)
     new_blocks = get_all_blocks_from_chain(new_chaintip, const.GENESIS_BLOCK_ID)
-    greatest_index = 0
+    greatest_index = -1
     for block in old_blocks:
         if block in new_blocks and old_blocks.index(block) > greatest_index:
             greatest_index = old_blocks.index(block)
 
-    return objects.get_object(old_blocks[greatest_index]) if greatest_index != 0 else objects.get_object(
+    return objects.get_object(old_blocks[greatest_index]) if greatest_index != -1 else objects.get_object(
         const.GENESIS_BLOCK_ID)
 
 
