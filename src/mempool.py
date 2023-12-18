@@ -27,7 +27,10 @@ def find_all_txs(txids):
 
 # return a list of transactions in blocks
 def get_all_txids_in_blocks(blocks):
-    pass  # TODO
+    txs = list()
+    for block in blocks:
+        txs.append(block['txids'])
+    return set(txs)
 
 
 def get_all_blocks_from_chain(chaintip, end_block):
@@ -71,6 +74,8 @@ def rebase_mempool(old_tip, new_tip, mptxids):
     # reapply_tx = []
     # while cur_block != ancestor:
     #     reapply_tx += objects.get_block_txs()
+
+
     pass  # TODO
 
 
@@ -93,27 +98,36 @@ class Mempool:
         return True  # TODO
 
     def rebase_to_block(self, bid: str):
-        rebase_mempool(self.base_block_id, bid, [])
-        (block, utxo, _) = objects.get_block_utxo_height(bid)
 
-        # gather all blocks between bid & latest state
-        now_pending = []
-        while block["previd"] != self.base_block_id:
-            now_pending.append(block)
-            (block, _, _) = objects.get_block_utxo_height(block["previd"])
+        ancestor, old_blocks, new_blocks = get_common_ancestor(self.base_block_id, bid)
+        reapply_tx = get_all_txids_in_blocks(old_blocks)
+        for tx in reapply_tx:
+            self.try_add_tx(tx)
 
-        # try to reapply all from earliest to latest
-        for item in now_pending[::-1]:
-            pass
 
-        self.base_block_id = bid
-        self.utxo = utxo
-        tx_to_reapply = self.txs
-        self.txs = []
+        # OLD
 
-        for item in tx_to_reapply:
-            self.try_add_tx(item)
-        pass  # TODO
+        #rebase_mempool(self.base_block_id, bid, [])
+        #(block, utxo, _) = objects.get_block_utxo_height(bid)
+#
+        ## gather all blocks between bid & latest state
+        #now_pending = []
+        #while block["previd"] != self.base_block_id:
+        #    now_pending.append(block)
+        #    (block, _, _) = objects.get_block_utxo_height(block["previd"])
+#
+        ## try to reapply all from earliest to latest
+        #for item in now_pending[::-1]:
+        #    pass
+#
+        #self.base_block_id = bid
+        #self.utxo = utxo
+        #tx_to_reapply = self.txs
+        #self.txs = []
+#
+        #for item in tx_to_reapply:
+        #    self.try_add_tx(item)
+        #pass  # TODO
 
     def print_mempool(self):  # debuuggg
         print(self.txs)
