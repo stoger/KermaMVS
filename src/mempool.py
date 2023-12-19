@@ -29,24 +29,32 @@ def find_all_txs(txids):
 def get_all_txids_in_blocks(blocks):
     txs = list()
     for block in blocks:
-        txs.append(block['txids'])
+        txs += block['txids']
     return set(txs)
 
 
 def get_all_blocks_from_chain(chaintip, end_block):
     tip = objects.get_object(chaintip)
+    if tip == None:
+        return []
+
+    if tip == end_block or tip['previd'] == None:
+        return [tip]
+
     blocks = list()
     next_block = objects.get_object(tip['previd'])
-    blocks.append(objects.get_objid(next_block))
+    blocks.append(next_block)
     while next_block is not end_block:
         next_block = objects.get_object(next_block['previd'])
-        blocks.append(objects.get_objid(next_block))
+        if next_block is None:
+            break
+        blocks.append(next_block)
     return blocks[::-1]
 
 
 def get_common_ancestor(old_chaintip, new_chaintip):
-    old_blocks = get_all_blocks_from_chain(old_chaintip, const.GENESIS_BLOCK_ID)
-    new_blocks = get_all_blocks_from_chain(new_chaintip, const.GENESIS_BLOCK_ID)
+    old_blocks = get_all_blocks_from_chain(old_chaintip, const.GENESIS_BLOCK)
+    new_blocks = get_all_blocks_from_chain(new_chaintip, const.GENESIS_BLOCK)
     greatest_index = -1
     for block in old_blocks:
         if block in new_blocks and old_blocks.index(block) > greatest_index:
@@ -86,7 +94,7 @@ class Mempool:
         self.txs = []
 
     def try_add_tx(self, tx: dict) -> bool:
-        if tx["inputs"] == []:
+        if "inputs" not in tx or tx["inputs"] == []:
             return False
         for item in tx["inputs"]:
             spending_tx = item["outpoint"]["txid"]
@@ -95,39 +103,25 @@ class Mempool:
 
             self.utxo.remove(spending_tx)
             self.txs.append(spending_tx)
-        return True  # TODO
+        return True 
 
     def rebase_to_block(self, bid: str):
-
-        ancestor, old_blocks, new_blocks = get_common_ancestor(self.base_block_id, bid)
+        ancestor, old_blocks, new_blocks = get_lca_and_intermediate_blocks(self.base_block_id, bid)
         reapply_tx = get_all_txids_in_blocks(old_blocks)
+        existing_tx = self.txs.copy()
+        self.txs = []
+
         for tx in reapply_tx:
             self.try_add_tx(tx)
+
+        for tx in existing_tx:
+            self.try_add_tx(tx)
+
         self.base_block_id = bid
 
-        # OLD
+        (_, utxo, _) = objects.get_block_utxo_height(bid)
+        self.utxo = utxo
 
-        #rebase_mempool(self.base_block_id, bid, [])
-        #(block, utxo, _) = objects.get_block_utxo_height(bid)
-#
-        ## gather all blocks between bid & latest state
-        #now_pending = []
-        #while block["previd"] != self.base_block_id:
-        #    now_pending.append(block)
-        #    (block, _, _) = objects.get_block_utxo_height(block["previd"])
-#
-        ## try to reapply all from earliest to latest
-        #for item in now_pending[::-1]:
-        #    pass
-#
-        #self.base_block_id = bid
-        #self.utxo = utxo
-        #tx_to_reapply = self.txs
-        #self.txs = []
-#
-        #for item in tx_to_reapply:
-        #    self.try_add_tx(item)
-        #pass  # TODO
 
     def print_mempool(self):  # debuuggg
         print(self.txs)
